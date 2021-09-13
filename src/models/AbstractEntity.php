@@ -658,7 +658,8 @@ abstract class AbstractEntity implements CrudInterface
             categoryt.color,
             CONCAT(users.firstname, ' ', users.lastname) AS fullname,
             commentst.recent_comment,
-            (commentst.recent_comment IS NOT NULL) AS has_comment";
+            (commentst.recent_comment IS NOT NULL) AS has_comment,
+            GROUP_CONCAT(DISTINCT linkst.link_id ORDER BY linkst.item_id SEPARATOR ',') as links";
 
         $tagsSelect = '';
         $tagsJoin = '';
