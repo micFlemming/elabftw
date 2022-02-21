@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * @author Nicolas CARPi <nico-git@deltablot.email>
  * @copyright 2012 Nicolas CARPi
@@ -6,7 +6,6 @@
  * @license AGPL-3.0
  * @package elabftw
  */
-declare(strict_types=1);
 
 namespace Elabftw\Models;
 
@@ -30,6 +29,8 @@ class ItemsTypes extends AbstractEntity
     {
         $this->Db = Db::getConnection();
         $this->team = $this->Users->team;
+        $this->Links = new Links($this);
+        $this->Steps = new Steps($this);
         $this->type = 'items_types';
         if ($id !== null) {
             $this->setId($id);
@@ -38,64 +39,28 @@ class ItemsTypes extends AbstractEntity
 
     public function create(ItemTypeParamsInterface $params): int
     {
-        $sql = 'INSERT INTO items_types(name, color, bookable, template, team, canread, canwrite)
-            VALUES(:content, :color, :bookable, :body, :team, :canread, :canwrite)';
+        $sql = 'INSERT INTO items_types(name, team) VALUES(:content, :team)';
         $req = $this->Db->prepare($sql);
-        $req->bindValue(':content', $params->getContent(), PDO::PARAM_STR);
-        $req->bindValue(':color', $params->getColor(), PDO::PARAM_STR);
-        $req->bindValue(':bookable', $params->getIsBookable(), PDO::PARAM_INT);
-        $req->bindValue(':body', $params->getBody(), PDO::PARAM_STR);
+        $req->bindValue(':content', $params->getTitle(), PDO::PARAM_STR);
         $req->bindParam(':team', $this->team, PDO::PARAM_INT);
-        $req->bindValue(':canread', $params->getCanread(), PDO::PARAM_STR);
-        $req->bindValue(':canwrite', $params->getCanwriteS(), PDO::PARAM_STR);
         $this->Db->execute($req);
 
         return $this->Db->lastInsertId();
     }
 
-    /**
-     * Read the body (template) and default permissions of the item_type from an id
-     */
     public function read(ContentParamsInterface $params): array
     {
         if ($params->getTarget() === 'all') {
             return $this->readAll();
         }
 
-        $sql = 'SELECT team, template, canread, canwrite, metadata FROM items_types WHERE id = :id AND team = :team';
+        $sql = 'SELECT id, team, color, bookable, name, body, canread, canwrite, metadata, state
+            FROM items_types WHERE id = :id AND team = :team';
         $req = $this->Db->prepare($sql);
         $req->bindParam(':id', $this->id, PDO::PARAM_INT);
         $req->bindParam(':team', $this->team, PDO::PARAM_INT);
         $this->Db->execute($req);
-
-        if ($req->rowCount() === 0) {
-            throw new ImproperActionException(_('Nothing to show with this id'));
-        }
-
-        $res = $req->fetch();
-        if ($res === false || $res === null) {
-            return array();
-        }
-        return $res;
-    }
-
-    /**
-     * Get the color of an item type
-     *
-     * @param int $id ID of the category
-     */
-    public function readColor(int $id): string
-    {
-        $sql = 'SELECT color FROM items_types WHERE id = :id';
-        $req = $this->Db->prepare($sql);
-        $req->bindParam(':id', $id, PDO::PARAM_INT);
-        $this->Db->execute($req);
-
-        $res = $req->fetchColumn();
-        if ($res === false || $res === null) {
-            return '';
-        }
-        return (string) $res;
+        return $this->Db->fetch($req);
     }
 
     public function duplicate(): int
@@ -110,7 +75,7 @@ class ItemsTypes extends AbstractEntity
             team = :team,
             color = :color,
             bookable = :bookable,
-            template = :template,
+            body = :body,
             canread = :canread,
             canwrite = :canwrite
             WHERE id = :id';
@@ -118,7 +83,7 @@ class ItemsTypes extends AbstractEntity
         $req->bindValue(':name', $params->getContent(), PDO::PARAM_STR);
         $req->bindValue(':color', $params->getColor(), PDO::PARAM_STR);
         $req->bindValue(':bookable', $params->getIsBookable(), PDO::PARAM_INT);
-        $req->bindValue(':template', $params->getBody(), PDO::PARAM_STR);
+        $req->bindValue(':body', $params->getBody(), PDO::PARAM_STR);
         $req->bindParam(':team', $this->team, PDO::PARAM_INT);
         $req->bindValue(':canread', $params->getCanread(), PDO::PARAM_STR);
         $req->bindValue(':canwrite', $params->getCanwriteS(), PDO::PARAM_STR);
@@ -129,7 +94,6 @@ class ItemsTypes extends AbstractEntity
 
     /**
      * Destroy an item type
-     *
      */
     public function destroy(): bool
     {
@@ -137,12 +101,8 @@ class ItemsTypes extends AbstractEntity
         if ($this->countItems() > 0) {
             throw new ImproperActionException(_('Remove all database items with this type before deleting this type.'));
         }
-        $sql = 'DELETE FROM items_types WHERE id = :id AND team = :team';
-        $req = $this->Db->prepare($sql);
-        $req->bindValue(':id', $this->id, PDO::PARAM_INT);
-        $req->bindParam(':team', $this->team, PDO::PARAM_INT);
 
-        return $this->Db->execute($req);
+        return parent::destroy();
     }
 
     /**
@@ -154,13 +114,14 @@ class ItemsTypes extends AbstractEntity
             items_types.name AS category,
             items_types.color,
             items_types.bookable,
-            items_types.template,
+            items_types.body,
             items_types.ordering,
             items_types.canread,
             items_types.canwrite
-            FROM items_types WHERE team = :team ORDER BY ordering ASC';
+            FROM items_types WHERE team = :team AND state = :state ORDER BY ordering ASC';
         $req = $this->Db->prepare($sql);
         $req->bindParam(':team', $this->team, PDO::PARAM_INT);
+        $req->bindValue(':state', self::STATE_NORMAL, PDO::PARAM_INT);
         $this->Db->execute($req);
 
         return $this->Db->fetchAll($req);

@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * @author Nicolas CARPi <nico-git@deltablot.email>
  * @copyright 2012 Nicolas CARPi
@@ -6,16 +6,14 @@
  * @license AGPL-3.0
  * @package elabftw
  */
-declare(strict_types=1);
 
 namespace Elabftw\Models;
 
+use Elabftw\Elabftw\CreateNotificationParams;
 use Elabftw\Elabftw\Db;
 use Elabftw\Exceptions\ImproperActionException;
-use Elabftw\Exceptions\ResourceNotFoundException;
 use Elabftw\Interfaces\ContentParamsInterface;
 use Elabftw\Services\Check;
-use Elabftw\Services\Email;
 use Elabftw\Services\EmailValidator;
 use Elabftw\Services\Filter;
 use Elabftw\Services\TeamsHelper;
@@ -80,6 +78,7 @@ class Users
         // make sure that all the teams in which the user will be are created/exist
         // this might throw an exception if the team doesn't exist and we can't create it on the fly
         $teams = $Teams->getTeamsFromIdOrNameOrOrgidArray($teams);
+        $TeamsHelper = new TeamsHelper((int) $teams[0]['id']);
 
         $EmailValidator = new EmailValidator($email, $Config->configArr['email_domain']);
         $EmailValidator->validate();
@@ -99,8 +98,6 @@ class Users
 
         // get the group for the new user
         if ($group === null) {
-            $teamId = (int) $teams[0]['id'];
-            $TeamsHelper = new TeamsHelper($teamId);
             $group = $TeamsHelper->getGroup();
         }
 
@@ -144,14 +141,12 @@ class Users
 
         // now add the user to the team
         $Teams->addUserToTeams($userid, array_column($teams, 'id'));
-        $userInfo = array('email' => $email, 'name' => $firstname . ' ' . $lastname);
-        $Email = new Email($Config, $this);
-        // just skip this if we don't have proper normalized teams
-        if ($alertAdmin && isset($teams[0]['id'])) {
-            $Email->alertAdmin((int) $teams[0]['id'], $userInfo, !(bool) $validated);
+        if ($alertAdmin) {
+            $this->notifyAdmins($TeamsHelper->getAllAdminsUserid(), $userid, $validated);
         }
         if ($validated === 0) {
-            $Email->alertUserNeedValidation($email);
+            $Notifications = new Notifications(new self($userid));
+            $Notifications->create(new CreateNotificationParams(Notifications::SELF_NEED_VALIDATION));
             // set a flag to show correct message to user
             $this->needValidation = true;
         }
@@ -221,12 +216,21 @@ class Users
         return (int) $req->fetchColumn();
     }
 
+    public function update(ContentParamsInterface $params): bool
+    {
+        $sql = 'UPDATE users SET ' . $params->getTarget() . ' = :content WHERE userid = :userid';
+        $req = $this->Db->prepare($sql);
+        $req->bindValue(':content', $params->getContent());
+        $req->bindParam(':userid', $this->userData['userid'], PDO::PARAM_INT);
+        return $this->Db->execute($req);
+    }
+
     /**
      * Update user from the editusers template
      *
      * @param array<string, mixed> $params POST
      */
-    public function update(array $params): bool
+    public function updateUser(array $params): bool
     {
         $this->checkEmail($params['email']);
 
@@ -236,7 +240,7 @@ class Users
         // (Sys)admins can only disable 2FA
         // input is disabled if there is no mfa active so no need for an else case
         $mfaSql = '';
-        if ($params['use_mfa'] === 'off') {
+        if (isset($params['use_mfa']) && $params['use_mfa'] === 'off') {
             $mfaSql = ', mfa_secret = null';
         }
 
@@ -348,7 +352,10 @@ class Users
         $sql = 'UPDATE users SET validated = 1 WHERE userid = :userid';
         $req = $this->Db->prepare($sql);
         $req->bindParam(':userid', $this->userData['userid'], PDO::PARAM_INT);
-        return $this->Db->execute($req);
+        $res = $this->Db->execute($req);
+        $Notifications = new Notifications($this);
+        $Notifications->create(new CreateNotificationParams(Notifications::SELF_IS_VALIDATED));
+        return $res;
     }
 
     /**
@@ -411,6 +418,21 @@ class Users
         return $this->Db->execute($req);
     }
 
+    private function notifyAdmins(array $admins, int $userid, int $validated): void
+    {
+        $body = array(
+            'userid' => $userid,
+        );
+        $notifCat = Notifications::USER_CREATED;
+        if ($validated === 0) {
+            $notifCat = Notifications::USER_NEED_VALIDATION;
+        }
+        foreach ($admins as $admin) {
+            $Notifications = new Notifications(new self((int) $admin));
+            $Notifications->create(new CreateNotificationParams($notifCat, $body));
+        }
+    }
+
     // if the user is already archived, make sure there is no other account with the same email
     private function getUnarchivedCount(): int
     {
@@ -433,12 +455,7 @@ class Users
         $req = $this->Db->prepare($sql);
         $req->bindParam(':userid', $userid, PDO::PARAM_INT);
         $this->Db->execute($req);
-        $res = $req->fetch();
-        if ($res === false) {
-            throw new ResourceNotFoundException();
-        }
-
-        return $res;
+        return $this->Db->fetch($req);
     }
 
     private function checkEmail(string $email): void

@@ -40,10 +40,11 @@ try {
     }
 
     $Teams = new Teams($App->Users);
+    $Email = new Email($App->Config, $App->Log);
 
     // CREATE TEAM
     if ($Request->request->has('teamsCreate')) {
-        $Teams->create($Request->request->get('teamsName'));
+        $Teams->create(new ContentParams($Request->request->get('teamsName')));
     }
 
     // UPDATE TEAM
@@ -61,13 +62,11 @@ try {
 
     // SEND TEST EMAIL
     if ($Request->request->has('testemailSend')) {
-        $Email = new Email($App->Config, $App->Users);
         $Email->testemailSend($Request->request->get('testemailEmail'));
     }
 
     // SEND MASS EMAIL
     if ($Request->request->has('massEmail')) {
-        $Email = new Email($App->Config, $App->Users);
         $Email->massEmail($Request->request->get('subject'), $Request->request->get('body'));
     }
 

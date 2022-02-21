@@ -21,7 +21,7 @@ export default class Entity {
   }
 
   // content can be a template id (for experiments), an itemtype id (for items) or a template title
-  create(content: string): Promise<ResponseMsg> {
+  create(content: string, tags: Array<string>): Promise<ResponseMsg> {
     const payload: Payload = {
       method: Method.POST,
       action: Action.Create,
@@ -31,6 +31,9 @@ export default class Entity {
       entity: {
         type: this.model,
         id: null,
+      },
+      extraParams: {
+        tags: tags,
       },
     };
     return this.sender.send(payload);
@@ -47,6 +50,7 @@ export default class Entity {
       },
       content: content,
       target: target,
+      notif: true,
     };
     return this.sender.send(payload);
   }
@@ -69,6 +73,7 @@ export default class Entity {
         type: this.model,
         id: id,
       },
+      notif: true,
     };
     return this.sender.send(payload);
   }

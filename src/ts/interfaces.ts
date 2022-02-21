@@ -10,7 +10,7 @@ interface ResponseMsg {
   res: boolean;
   msg: string;
   color?: string;
-  value?: string | Array<Todoitem> | Array<BoundEvent> | Array<UnfinishedExperiments> | Array<Upload> | object | MetadataJson;
+  value?: string | Array<Todoitem> | Array<BoundEvent> | Array<UnfinishedEntities> | Array<Upload> | object | MetadataJson;
 }
 
 interface MetadataJson {
@@ -28,7 +28,7 @@ interface Todoitem {
   creation_time: string;
 }
 
-interface UnfinishedExperiments {
+interface UnfinishedEntities {
   id: number;
   title: string;
   steps: Array<string>;
@@ -56,6 +56,7 @@ enum Action {
   Update = 'update',
   Destroy = 'destroy',
 
+  DestroyStamppass = 'destroystamppass',
   Deduplicate = 'deduplicate',
   Duplicate = 'duplicate',
   Lock = 'lock',
@@ -64,11 +65,16 @@ enum Action {
 enum Model {
   Apikey = 'apikey',
   Comment = 'comment',
+  Config = 'config',
   Link = 'link',
+  FavTag = 'favtag',
+  Notification = 'notification',
   PrivacyPolicy = 'privacypolicy',
   Status = 'status',
   Step = 'step',
+  UnfinishedSteps = 'unfinishedsteps',
   Tag = 'tag',
+  Team = 'team',
   TeamGroup = 'teamgroup',
   Todolist = 'todolist',
   Upload = 'upload',
@@ -92,6 +98,8 @@ enum Target {
   List = 'list',
   Member = 'member',
   Metadata = 'metadata',
+  TsOverride = 'ts_override',
+  TsAuthority = 'ts_authority',
   PrivacyPolicy = 'privacypolicy',
   Rating = 'rating',
   RealName = 'real_name',
@@ -117,7 +125,9 @@ interface Payload {
   content?: string;
   target?: Target;
   id?: number;
-  extraParams?: {};
+  // no notif key means no notif wanted
+  notif?: boolean;
+  extraParams?: Record<string, unknown>;
 }
 
 export {
@@ -133,6 +143,6 @@ export {
   Todoitem,
   EntityType,
   Entity,
-  UnfinishedExperiments,
+  UnfinishedEntities,
   Upload,
 };

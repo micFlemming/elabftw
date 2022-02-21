@@ -17,6 +17,7 @@ use const DB_PASSWORD;
 use const DB_PORT;
 use const DB_USER;
 use Elabftw\Exceptions\DatabaseErrorException;
+use Elabftw\Exceptions\ResourceNotFoundException;
 use PDO;
 use PDOException;
 use PDOStatement;
@@ -48,6 +49,7 @@ final class Db
         $pdo_options[PDO::ATTR_PERSISTENT] = true;
         // only return a named array
         $pdo_options[PDO::ATTR_DEFAULT_FETCH_MODE] = PDO::FETCH_ASSOC;
+        // @phpstan-ignore-next-line
         if (defined('DB_CERT_PATH') && !empty(DB_CERT_PATH)) {
             $pdo_options[PDO::MYSQL_ATTR_SSL_CA] = DB_CERT_PATH;
         }
@@ -110,13 +112,11 @@ final class Db
 
     /**
      * Execute a prepared statement and throw exception if it doesn't return true
-     *
-     * @param array<mixed>|null $arr optional array to execute
      */
-    public function execute(PDOStatement $req, ?array $arr = null): bool
+    public function execute(PDOStatement $req): bool
     {
         try {
-            $res = $req->execute($arr);
+            $res = $req->execute();
         } catch (PDOException $e) {
             throw new DatabaseErrorException($e);
         }
@@ -127,7 +127,23 @@ final class Db
     }
 
     /**
-     * Force fetchAll to return an array or throw exception if result is false
+     * Force fetch() to return an array or throw exception if result is false
+     * because this is hard to test
+     */
+    public function fetch(PDOStatement $req): array
+    {
+        if ($req->rowCount() === 0) {
+            throw new ResourceNotFoundException();
+        }
+        $res = $req->fetch();
+        if ($res === false || $res === null) {
+            return array();
+        }
+        return $res;
+    }
+
+    /**
+     * Force fetchAll() to return an array or throw exception if result is false
      * because this is hard to test
      */
     public function fetchAll(PDOStatement $req): array

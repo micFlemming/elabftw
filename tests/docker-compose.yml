@@ -1,5 +1,5 @@
 # this file is used by the tests/run.sh script
-# it will spawn temporary containers to test things with selenium
+# it will spawn temporary containers to test things out
 # https://www.elabftw.net
 version: '3'
 
@@ -40,11 +40,16 @@ services:
             - USE_REDIS=false
             - ENABLE_IPV6=true
             - DEV_MODE=true
+            - ELAB_AWS_ACCESS_KEY=yep
+            - ELAB_AWS_SECRET_KEY=yop
         volumes:
             - ..:/elabftw
             - ../_coverage:/elabftw/tests/_output/coverage
         networks:
             - elabftw-net
+        depends_on:
+          - mysql
+
     mysql:
         image: mysql:8.0
         container_name: mysqltmp
@@ -65,25 +70,6 @@ services:
             # need to change
             - MYSQL_PASSWORD=phpunit
             - TZ=Europe/Paris
-        networks:
-            - elabftw-net
-    selenium-hub:
-        image: selenium/hub
-        container_name: selenium-hub
-        ports:
-            - "4444:4444"
-        networks:
-            - elabftw-net
-    chrome:
-        image: selenium/node-chrome
-        container_name: chrome
-        volumes:
-            - /dev/shm:/dev/shm
-        depends_on:
-            - selenium-hub
-        environment:
-            - HUB_HOST=selenium-hub
-            - HUB_PORT=4444
         networks:
             - elabftw-net
 networks:

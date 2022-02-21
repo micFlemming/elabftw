@@ -5,7 +5,7 @@
  * @license AGPL-3.0
  * @package elabftw
  */
-declare let key: any;
+declare let key: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 import { notif } from './misc';
 import { getTinymceBaseConfig, quickSave } from './tinymce';
 import { EntityType, Target, Upload, Payload, Method, Action } from './interfaces';
@@ -14,6 +14,7 @@ import tinymce from 'tinymce/tinymce';
 import { getEditor } from './Editor.class';
 import { getEntity } from './misc';
 import Dropzone from 'dropzone';
+import { File } from 'dropzone';
 import i18next from 'i18next';
 import { Metadata } from './Metadata.class';
 import { Ajax } from './Ajax.class';
@@ -48,7 +49,8 @@ document.addEventListener('DOMContentLoaded', () => {
   editor.init();
 
   // UPLOAD FORM
-  new Dropzone('form#elabftw-dropzone', {
+  const dropZoneElement = '#elabftw-dropzone';
+  new Dropzone(dropZoneElement, {
     // i18n message to user
     dictDefaultMessage: i18next.t('dropzone-upload-area'),
     maxFilesize: $('#info').data('maxsize'), // MB
@@ -66,14 +68,14 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       // once it is done
-      this.on('complete', function(answer: any) {
+      this.on('complete', function(answer: File) {
         // check the answer we get back from the controller
         const json = JSON.parse(answer.xhr.responseText);
         notif(json);
         // reload the #filesdiv once the file is uploaded
         if (this.getUploadingFiles().length === 0 && this.getQueuedFiles().length === 0) {
           $('#filesdiv').load(`?mode=edit&id=${String(entity.id)} #filesdiv > *`, function() {
-            const dropZone = Dropzone.forElement('#elabftw-dropzone');
+            const dropZone = Dropzone.forElement(dropZoneElement);
             // Check to make sure the success function is set by tinymce and we are dealing with an image drop and not a regular upload
             if (typeof dropZone.tinyImageSuccess !== 'undefined' && dropZone.tinyImageSuccess !== null) {
               // Uses the newly updated HTML element for the uploads section to find the last file uploaded and use that to get the remote url for the image.
@@ -99,7 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if ((localStorage.getItem('id') == String(entity.id)) && (localStorage.getItem('type') == entity.type)) {
     const bodyRecovery = $('<div></div>', {
       'class' : 'alert alert-warning',
-      html: 'Recovery data found (saved on ' + localStorage.getItem('date') + '). It was probably saved because your session timed out and it could not be saved in the database. Do you want to recover it?<br><button class="button recover-yes">YES</button> <button class="button btn btn-danger recover-no">NO</button><br><br>Here is what it looks like: ' + localStorage.getItem('body'),
+      html: 'Recovery data found (saved on ' + localStorage.getItem('date') + '). It was probably saved because your session timed out and it could not be saved in the database. Do you want to recover it?<br><button class="button btn btn-primary recover-yes">YES</button> <button class="button btn btn-danger recover-no">NO</button><br><br>Here is what it looks like: ' + localStorage.getItem('body'),
     });
     $('#main_section').before(bodyRecovery);
   }
@@ -123,7 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // GET MOL FILES
   function getListFromMolFiles(): void {
-    const mols: any = [];
+    const mols = [];
     const UploadC = new UploadClass(entity);
     UploadC.read().then(json => {
       for (const upload of json.value as Array<Upload>) {
@@ -136,7 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       let listHtml = '<ul class="text-left">';
-      mols.forEach(function(mol: any, index: any) {
+      mols.forEach(function(mol: [string, string], index: number) {
         listHtml += '<li style="color:#29aeb9" class="clickable loadableMolLink" data-target="app/download.php?f=' + mols[index][1] + '">' + mols[index][0] + '</li>';
       });
       $('.getMolButton').text('Refresh list');
@@ -198,7 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // DESTROY ENTITY
     } else if (el.matches('[data-action="destroy"]')) {
-      if (confirm(i18next.t('entity-delete-warning'))) {
+      if (confirm(i18next.t('generic-delete-warning'))) {
         const path = window.location.pathname;
         EntityC.destroy(entity.id).then(json => {
           if (json.res) {
@@ -319,7 +321,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const tinyConfig = getTinymceBaseConfig('edit');
 
     const tinyConfigForEdit = {
-      images_upload_handler: (blobInfo, success): void => { // eslint-disable-line @typescript-eslint/camelcase
+      images_upload_handler: (blobInfo, success): void => {
         const dropZone = Dropzone.forElement('#elabftw-dropzone');
         // Edgecase for editing an image using tinymce ImageTools
         // Check if it was selected. This is set by an event hook below
@@ -378,7 +380,7 @@ document.addEventListener('DOMContentLoaded', () => {
         (new Ajax()).send(payload).then(json => callback(json.value));
       },
       // use a custom function for the save button in toolbar
-      save_onsavecallback: (): void => quickSave(), // eslint-disable-line @typescript-eslint/camelcase
+      save_onsavecallback: (): void => quickSave(),
     };
 
     tinymce.init(Object.assign(tinyConfig, tinyConfigForEdit));

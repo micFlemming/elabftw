@@ -21,22 +21,28 @@ class MakeCsvTest extends \PHPUnit\Framework\TestCase
 
     protected function setUp(): void
     {
-        $this->MakeExp = new MakeCsv(new Experiments(new Users(1, 1)), '1 2 3');
-        $this->MakeDb = new MakeCsv(new Items(new Users(1, 1)), '1 2 3');
+        $idArr = array('1', '2', '3');
+        $this->MakeExp = new MakeCsv(new Experiments(new Users(1, 1)), $idArr);
+        $this->MakeDb = new MakeCsv(new Items(new Users(1, 1)), $idArr);
     }
 
     public function testGetFileName(): void
     {
-        $this->assertMatchesRegularExpression('/\d{8}-export.elabftw.csv/', $this->MakeExp->getFileName());
+        $this->assertMatchesRegularExpression('/\d{4}-\d{2}-\d{2}-export.elabftw.csv/', $this->MakeExp->getFileName());
     }
 
     public function testGetCsvExp(): void
     {
-        $csv = $this->MakeExp->getCsv();
+        $this->assertIsString($this->MakeExp->getFileContent());
     }
 
     public function testGetCsvDb(): void
     {
-        $csv = $this->MakeDb->getCsv();
+        $this->assertIsString($this->MakeDb->getFileContent());
+    }
+
+    public function testGetContentType(): void
+    {
+        $this->assertEquals('text/csv; charset=UTF-8', $this->MakeDb->getContentType());
     }
 }

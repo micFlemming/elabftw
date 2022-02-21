@@ -5,16 +5,23 @@
  * @license AGPL-3.0
  * @package elabftw
  */
-declare let ChemDoodle: any;
+declare let ChemDoodle: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 import 'jquery-ui/ui/widgets/sortable';
 import * as $3Dmol from '3dmol/build/3Dmol-nojquery.js';
 import { CheckableItem, ResponseMsg } from './interfaces';
 import { DateTime } from 'luxon';
 import { EntityType, Entity } from './interfaces';
+import { MathJaxObject } from 'mathjax-full/js/components/startup';
+declare const MathJax: MathJaxObject;
 
 // get html of current page reloaded via get
-function fetchCurrentPage(): Promise<Document>{
-  return fetch(window.location.href).then(response => {
+function fetchCurrentPage(tag = ''): Promise<Document>{
+  const url = new URL(window.location.href);
+  if (tag) {
+    url.searchParams.delete('tags[]');
+    url.searchParams.set('tags[]', tag);
+  }
+  return fetch(url.toString()).then(response => {
     return response.text();
   }).then(data => {
     const parser = new DOMParser();
@@ -128,7 +135,7 @@ export function display3DMolecules(autoload = false): void {
 }
 
 // insert a get param in the url and reload the page
-export function insertParamAndReload(key: string, value: any): void {
+export function insertParamAndReload(key: string, value: string): void {
   const params = new URLSearchParams(document.location.search.slice(1));
   params.set(key, value);
   // reload the page
@@ -172,15 +179,17 @@ export function getCheckedBoxes(): Array<CheckableItem> {
 }
 
 // reload the entities in show mode
-export async function reloadEntitiesShow(): Promise<void | Response> {
+export async function reloadEntitiesShow(tag = ''): Promise<void | Response> {
   // get the html
-  const html = await fetchCurrentPage();
+  const html = await fetchCurrentPage(tag);
   // reload items
-  document.getElementById('itemList').innerHTML = html.getElementById('itemList').innerHTML;
+  document.getElementById('showModeContent').innerHTML = html.getElementById('showModeContent').innerHTML;
   // also reload any pinned entities present
   if (document.getElementById('pinned-entities')) {
     document.getElementById('pinned-entities').innerHTML = html.getElementById('pinned-entities').innerHTML;
   }
+  // ask mathjax to reparse the page
+  MathJax.typeset();
 }
 
 export async function reloadElement(elementId): Promise<void> {

@@ -55,6 +55,14 @@ try {
     require_once $configFilePath;
     // END CONFIG.PHP
 
+    // Config::getConfig() will make the first SQL request
+    // PDO will throw an exception if the SQL structure is not imported yet
+    try {
+        $Config = Config::getConfig();
+    } catch (DatabaseErrorException | PDOException $e) {
+        throw new ImproperActionException('The database structure is not loaded! Did you run the installer?');
+    }
+
     // CSRF
     $Csrf = new Csrf($Request);
     if ($Session->has('csrf')) {
@@ -70,13 +78,7 @@ try {
     }
     // END CSRF
 
-    try {
-        // Config::getConfig() will make the first SQL request
-        // PDO will throw an exception if the SQL structure is not imported yet
-        $App = new App($Request, $Session, Config::getConfig(), new Logger('elabftw'));
-    } catch (DatabaseErrorException | PDOException $e) {
-        throw new ImproperActionException('The database structure is not loaded! Did you run the installer?');
-    }
+    $App = new App($Request, $Session, $Config, new Logger('elabftw'));
     //-*-*-*-*-*-*-**-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-//
     //     ____          _                            //
     //    / ___|___ _ __| |__   ___ _ __ _   _ ___    //
@@ -136,7 +138,7 @@ try {
             'httponly' => true,
             'samesite' => 'Strict',
         );
-        setcookie('redirect', $Request->getRequestUri(), $cookieOptions);
+        setcookie('elab_redirect', $Request->getRequestUri(), $cookieOptions);
     }
 
     // used by ajax requests to detect a timed out session
@@ -144,7 +146,14 @@ try {
     // don't send a GET app/logout.php if it's an ajax call because it messes up the jquery ajax
     if ($Request->headers->get('X-Requested-With') !== 'XMLHttpRequest') {
         // Note: we assume https here, this will cause an issue if you try to access it in http, but anyway this should never be done so I guess it's okay.
-        $url = 'https://' . $Request->getHost() . ':' . $Request->getPort() . '/app/logout.php?keep_redirect=1';
+        // don't use the Config from App here as it might not exist yet
+        $Config = Config::getConfig();
+        if ($Config->configArr['url']) {
+            $url = $Config->configArr['url'];
+        } else {
+            $url = 'https://' . $Request->getHost() . ':' . $Request->getPort();
+        }
+        $url .= '/app/logout.php?keep_redirect=1';
         header('Location: ' . $url);
     }
     exit;

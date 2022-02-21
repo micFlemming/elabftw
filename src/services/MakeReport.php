@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * @author Nicolas CARPi <nico-git@deltablot.email>
  * @copyright 2012 Nicolas CARPi
@@ -6,24 +6,25 @@
  * @license AGPL-3.0
  * @package elabftw
  */
-declare(strict_types=1);
 
 namespace Elabftw\Services;
 
+use function date;
 use Elabftw\Elabftw\Db;
 use Elabftw\Elabftw\Tools;
+use Elabftw\Interfaces\FileMakerInterface;
 use Elabftw\Models\Teams;
 use Elabftw\Models\Users;
 use Elabftw\Traits\CsvTrait;
 use Elabftw\Traits\UploadTrait;
+use PDO;
 
 /**
  * Create a report of usage for all users
  */
-class MakeReport
+class MakeReport implements FileMakerInterface
 {
     use CsvTrait;
-
     use UploadTrait;
 
     protected Db $Db;
@@ -38,7 +39,7 @@ class MakeReport
      */
     public function getFileName(): string
     {
-        return Filter::kdate() . '-report.elabftw.csv';
+        return date('Y-m-d') . '-report.elabftw.csv';
     }
 
     /**
@@ -77,8 +78,20 @@ class MakeReport
             // get disk usage for all uploaded files
             $diskUsage = $this->getDiskUsage((int) $user['userid']);
 
-            // remove mfa column
-            unset($allUsers[$key]['mfa_secret']);
+            // remove unused columns as they will mess up the csv
+            // these columns can be null
+            $unusedColumns = array(
+                'mfa_secret',
+                'phone',
+                'cellphone',
+                'skype',
+                'website',
+                'token',
+                'auth_lock_time',
+            );
+            foreach ($unusedColumns as $column) {
+                unset($allUsers[$key][$column]);
+            }
 
             $allUsers[$key]['team(s)'] = $teams;
             $allUsers[$key]['diskusage_in_bytes'] = $diskUsage;
@@ -87,5 +100,14 @@ class MakeReport
             $allUsers[$key]['exp_timestamped_total'] = $UsersHelper->countTimestampedExperiments();
         }
         return $allUsers;
+    }
+
+    private function getDiskUsage(int $userid): int
+    {
+        $sql = 'SELECT SUM(filesize) FROM uploads WHERE userid = :userid';
+        $req = $this->Db->prepare($sql);
+        $req->bindParam(':userid', $userid, PDO::PARAM_INT);
+        $this->Db->execute($req);
+        return (int) $req->fetchColumn();
     }
 }

@@ -10,16 +10,12 @@ declare(strict_types=1);
 
 namespace Elabftw\Services;
 
-use function bin2hex;
 use function dirname;
 use Elabftw\Elabftw\Db;
+use Elabftw\Elabftw\FsTools;
 use Elabftw\Elabftw\Tools;
-use Elabftw\Exceptions\FilesystemErrorException;
 use Elabftw\Models\AbstractEntity;
 use Elabftw\Traits\UploadTrait;
-use function hash;
-use function random_bytes;
-use Symfony\Component\HttpFoundation\Request;
 
 /**
  * Mother class of the Make* services
@@ -48,32 +44,12 @@ abstract class AbstractMake
     abstract public function getFileName(): string;
 
     /**
-     * Create a unique long filename with a folder
-     *
-     * @return string the path for storing the file
+     * Get the contents of assets/pdf.min.css
      */
-    protected function getLongName(): string
+    protected function getCss(): string
     {
-        $hash = hash('sha512', bin2hex(random_bytes(16)));
-        $folder = substr($hash, 0, 2);
-
-        return $folder . '/' . $hash;
-    }
-
-    /**
-     * Get the temporary files folder absolute path
-     * Create the folder if it doesn't exist
-     *
-     * @return string absolute path
-     */
-    protected function getTmpPath(): string
-    {
-        $tmpPath = dirname(__DIR__, 2) . '/cache/elab/';
-        if (!is_dir($tmpPath) && !mkdir($tmpPath, 0700, true) && !is_dir($tmpPath)) {
-            throw new FilesystemErrorException("Unable to create the cache directory ($tmpPath)");
-        }
-
-        return $tmpPath;
+        $assetsFs = FsTools::getFs(dirname(__DIR__, 2) . '/web/assets');
+        return $assetsFs->read('pdf.min.css');
     }
 
     /**
@@ -81,11 +57,13 @@ abstract class AbstractMake
      *
      * @return string url to the item/experiment
      */
-    protected function getUrl(): string
+    protected function getUrl(?int $entityId = null): string
     {
-        $Request = Request::createFromGlobals();
-        $url = Tools::getUrl($Request) . '/' . $this->Entity->page . '.php';
-
-        return $url . '?mode=view&id=' . (string) $this->Entity->id;
+        return sprintf(
+            '%s/%s.php?mode=view&id=%d',
+            Tools::getUrl(),
+            $this->Entity->page,
+            $entityId ?? $this->Entity->id,
+        );
     }
 }

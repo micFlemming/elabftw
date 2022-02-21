@@ -11,15 +11,11 @@ declare(strict_types=1);
 namespace Elabftw\Elabftw;
 
 use function bin2hex;
-use function dirname;
 use Elabftw\Exceptions\ImproperActionException;
 use Elabftw\Exceptions\InvalidSchemaException;
 use Elabftw\Models\Config;
-use FilesystemIterator;
 use PDO;
 use function random_bytes;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
 use function sha1;
 
 /**
@@ -35,7 +31,7 @@ use function sha1;
 class Update
 {
     /** @var int REQUIRED_SCHEMA the current version of the database structure */
-    private const REQUIRED_SCHEMA = 64;
+    private const REQUIRED_SCHEMA = 73;
 
     private Db $Db;
 
@@ -65,11 +61,13 @@ class Update
     /**
      * Update the database schema if needed
      */
-    public function runUpdateScript(): void
+    public function runUpdateScript(): array
     {
+        $warn = array();
+
         // do nothing if we're up to date
         if ($this->currentSchema === self::REQUIRED_SCHEMA) {
-            return;
+            return $warn;
         }
 
         // old style update functions have been removed, so add a block to prevent upgrade from very very old to newest directly
@@ -90,27 +88,16 @@ class Update
                 $this->addElabidToItems();
                 $this->fixExperimentsRevisions();
             }
+            // schema70: notifications cron needed
+            if ($this->currentSchema === 70) {
+                $warn[] = 'Change in the notification/email system: a cronjob is now REQUIRED for email notifications to be sent. Make sure to read the release notes!';
+            }
         }
-
 
         // remove cached twig templates (for non docker users)
-        $this->cleanTmp();
-    }
+        FsTools::deleteCache();
 
-    /**
-     * Delete things in the tmp folder (cache/elab)
-     */
-    private function cleanTmp(): void
-    {
-        $dir = dirname(__DIR__, 2) . '/cache/elab';
-        if (!is_dir($dir)) {
-            return;
-        }
-        $di = new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS);
-        $ri = new RecursiveIteratorIterator($di, RecursiveIteratorIterator::CHILD_FIRST);
-        foreach ($ri as $file) {
-            $file->isDir() ? rmdir($file->getPathName()) : unlink($file->getPathName());
-        }
+        return $warn;
     }
 
     private function addElabidToItems(): void

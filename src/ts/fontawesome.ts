@@ -21,7 +21,10 @@ import {
   faChartPie,
   faCheck,
   faCheckSquare,
+  faChevronCircleDown,
   faChevronCircleLeft,
+  faChevronCircleRight,
+  faChevronDown,
   faChevronLeft,
   faChevronRight,
   faClipboardCheck,
@@ -95,7 +98,10 @@ library.add(
   faChartPie,
   faCheck,
   faCheckSquare,
+  faChevronCircleDown,
   faChevronCircleLeft,
+  faChevronCircleRight,
+  faChevronDown,
   faChevronLeft,
   faChevronRight,
   faClipboardCheck,
@@ -162,8 +168,8 @@ library.add(
 );
 
 // REGULAR
-import { faCalendarAlt, faCalendarCheck, faCopy} from '@fortawesome/free-regular-svg-icons';
-library.add(faCalendarAlt, faCalendarCheck, faCopy);
+import { faBell, faCalendarAlt, faCalendarCheck, faCopy} from '@fortawesome/free-regular-svg-icons';
+library.add(faBell, faCalendarAlt, faCalendarCheck, faCopy);
 
 // BRANDS
 import { faGithub, faGitter, faTwitter } from '@fortawesome/free-brands-svg-icons';

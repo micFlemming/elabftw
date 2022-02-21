@@ -1,0 +1,55 @@
+<div class='side-panel' id='todolistPanel' hidden>
+  <a class='clickable float-right mr-2 mt-2' data-action='toggle-todolist' title='{{ 'Close'|trans }}'>
+    <i class='fas fa-chevron-left fa-2x'></i>
+  </a>
+  <div class='mx-2 mt-2'>
+    <h3 title='{{ 'Toggle visibility'|trans }}' data-action='toggle-next' data-icon='todolistToggleIcon'><i id='todolistToggleIcon' class='fas fa-chevron-circle-down'></i> {{ 'Todolist'|trans }}</h3>
+
+    <div data-save-hidden='todolistMainDiv'>
+      <div class='input-group mb-2'>
+        <input id='todo' type='text' class='form-control form-inline' aria-label='{{ 'Add'|trans }}' placeholder='{{ 'New item'|trans }}'>
+        <div class='input-group-append'>
+          <button class='btn btn-outline-secondary' type='button' title='{{ 'Add'|trans }}' data-action='create-todoitem' aria-label='{{ 'Add'|trans }}'>
+            <i class='fas fa-plus-circle fa-fw' title='{{ 'Add'|trans }}'></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- this list will be filled with the to-do items by js -->
+      <ul id='todoItems' class='sortable' data-axis='y' data-table='todolist'></ul>
+    </div>
+  </div>
+
+  <div class='clear'><hr></div>
+  <div class='d-flex mx-2'>
+    <div class='mr-auto'>
+    <h3 class='mr-auto'>{{ 'Unfinished steps'|trans }}</h3>
+    </div>
+    <div class='d-inline-flex justify-content-center switch-btn'>
+      <div class='switch-label'>{{ 'User'|trans }}</div>
+      <div class='custom-control custom-switch' style='padding-left: 1.3rem'>
+        <input type='checkbox' id='todolistStepsShowTeam' class='custom-control-input'
+          autocomplete='off'
+          aria-label='{{ 'Show items steps for team'|trans }}'>
+        <label class='custom-control-label' for='todolistStepsShowTeam' style='margin-top: 3px;'></label>
+      </div>
+      <div class='switch-label'>{{ 'Team'|trans }}</div>
+    </div>
+  </div>
+
+  <!-- toggle visibility of experiment steps -->
+  <div class='d-inline-block mx-2 mt-2'>
+    <h3 title='{{ 'Toggle visibility'|trans }}' data-action='toggle-next' data-icon='todoStepsExperimentIcon'><i id='todoStepsExperimentIcon' class='fas fa-chevron-circle-down'></i> {% trans %}Experiment{% plural 2 %}Experiments{% endtrans %}</h3>
+    <!-- id is needed to fill it -->
+    <ul id='todoStepsExperiment' data-save-hidden='todoStepsExperiment'></ul>
+  </div>
+
+  <div class='clear'></div>
+  <div class='d-inline-block mx-2 mt-2'>
+    <h3 title='{{ 'Toggle visibility'|trans }}' data-action='toggle-next' data-icon='todoStepsItemIcon'><i id='todoStepsItemIcon' class='fas fa-chevron-circle-down'></i> {{ 'Items'|trans }}</h3>
+    <!-- id is needed to fill it -->
+    <ul id='todoStepsItem' data-save-hidden='todoStepsItem'></ul>
+  </div>
+</div>
+
+<div id='todoSc' data-toggle='{{ App.Users.userData.sc_todo }}'></div>

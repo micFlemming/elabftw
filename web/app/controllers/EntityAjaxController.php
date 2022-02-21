@@ -14,6 +14,7 @@ use function dirname;
 use Elabftw\Exceptions\IllegalActionException;
 use Elabftw\Exceptions\ImproperActionException;
 use Elabftw\Exceptions\UnauthorizedException;
+use Elabftw\Models\Config;
 use Elabftw\Models\Experiments;
 use Elabftw\Models\Items;
 use Elabftw\Models\ItemsTypes;
@@ -22,7 +23,14 @@ use Elabftw\Models\Teams;
 use Elabftw\Models\Templates;
 use Elabftw\Services\ListBuilder;
 use Elabftw\Services\MakeBloxberg;
+use Elabftw\Services\MakeDfnTimestamp;
+use Elabftw\Services\MakeDigicertTimestamp;
+use Elabftw\Services\MakeGlobalSignTimestamp;
+use Elabftw\Services\MakeSectigoTimestamp;
 use Elabftw\Services\MakeTimestamp;
+use Elabftw\Services\MakeUniversignTimestamp;
+use Elabftw\Services\MakeUniversignTimestampDev;
+use Elabftw\Services\TimestampUtils;
 use Exception;
 use GuzzleHttp\Client;
 use function mb_convert_encoding;
@@ -106,7 +114,8 @@ try {
         } else {
             $Entity = new Items($App->Users);
         }
-        $ListBuilder = new ListBuilder($Entity);
+        $catFilter = (int) $Request->query->get('filter');
+        $ListBuilder = new ListBuilder($Entity, $catFilter);
         // fix issue with Malformed UTF-8 characters, possibly incorrectly encoded
         // see #2404
         $responseArr = $ListBuilder->getAutocomplete($Request->query->get('term'));
@@ -119,7 +128,7 @@ try {
             throw new IllegalActionException('Can only share experiments or items.');
         }
         $Entity->canOrExplode('read');
-        $link = Tools::getUrl($Request) . '/' . $Entity->page . '.php?mode=view&id=' . $Entity->id . '&elabid=' . $Entity->entityData['elabid'];
+        $link = Tools::getUrl() . '/' . $Entity->page . '.php?mode=view&id=' . $Entity->id . '&elabid=' . $Entity->entityData['elabid'];
         $Response->setData(array(
             'res' => true,
             'msg' => $link,
@@ -133,8 +142,44 @@ try {
 
     // TIMESTAMP
     if ($Request->request->has('timestamp') && $Entity instanceof Experiments) {
-        $MakeTimestamp = new MakeTimestamp($App->Config, new Teams($App->Users), $Entity);
-        $MakeTimestamp->timestamp();
+        // by default, use the instance config
+        $config = $App->Config->configArr;
+
+        // if the current team chose to override the default, use that
+        $Teams = new Teams($App->Users);
+        $teamConfigArr = $Teams->read(new ContentParams());
+        if ($teamConfigArr['ts_override'] === '1') {
+            $config = $teamConfigArr;
+        }
+
+        if ($config['ts_authority'] === 'dfn') {
+            $Maker = new MakeDfnTimestamp($config, $Entity);
+        } elseif ($config['ts_authority'] === 'universign') {
+            if ($App->Config->configArr['debug']) {
+                // this will use the sandbox endpoint
+                $Maker = new MakeUniversignTimestampDev($config, $Entity);
+            } else {
+                $Maker = new MakeUniversignTimestamp($config, $Entity);
+            }
+        } elseif ($config['ts_authority'] === 'digicert') {
+            $Maker = new MakeDigicertTimestamp($config, $Entity);
+        } elseif ($config['ts_authority'] === 'sectigo') {
+            $Maker = new MakeSectigoTimestamp($config, $Entity);
+        } elseif ($config['ts_authority'] === 'globalsign') {
+            $Maker = new MakeGlobalSignTimestamp($config, $Entity);
+        } else {
+            $Maker = new MakeTimestamp($config, $Entity);
+        }
+
+        $pdfBlob = $Maker->generatePdf();
+        $TimestampUtils = new TimestampUtils(
+            new Client(),
+            $pdfBlob,
+            $Maker->getTimestampParameters(),
+            new TimestampResponse(),
+        );
+        $tsResponse = $TimestampUtils->timestamp();
+        $Maker->saveTimestamp($TimestampUtils->getDataPath(), $tsResponse);
     }
 
     // BLOXBERG
@@ -163,7 +208,9 @@ try {
 
     // CREATE UPLOAD
     if ($Request->request->has('upload')) {
-        $Entity->Uploads->create(new CreateUpload($Request));
+        $realName = $Request->files->get('file')->getClientOriginalName();
+        $filePath = $Request->files->get('file')->getPathname();
+        $Entity->Uploads->create(new CreateUpload($realName, $filePath));
     }
 
     // ADD MOL FILE OR PNG
@@ -182,17 +229,19 @@ try {
 
     // UPDATE CATEGORY (item type or status)
     if ($Request->request->has('updateCategory')) {
-        $Entity->updateCategory((int) $Request->request->get('categoryId'));
+        $id = (int) $Request->request->get('categoryId');
+        $Entity->updateCategory($id);
         // get the color of the status/item type for updating the css
         if ($Entity instanceof Experiments) {
-            $Category = new Status($App->Users->team);
+            $Category = new Status($App->Users->team, $id);
         } else {
-            $Category = new ItemsTypes($App->Users);
+            $Category = new ItemsTypes($App->Users, $id);
         }
+        $categoryArr = $Category->read(new ContentParams());
         $Response->setData(array(
             'res' => true,
             'msg' => _('Saved'),
-            'color' => $Category->readColor((int) $Request->request->get('categoryId')),
+            'color' => $categoryArr['color'],
         ));
     }
 } catch (ImproperActionException | UnauthorizedException | PDOException $e) {

@@ -14,6 +14,7 @@ use function array_column;
 use Elabftw\Elabftw\ContentParams;
 use Elabftw\Elabftw\Db;
 use Elabftw\Elabftw\DisplayParams;
+use Elabftw\Elabftw\EntityParams;
 use Elabftw\Elabftw\Permissions;
 use Elabftw\Elabftw\Tools;
 use Elabftw\Exceptions\IllegalActionException;
@@ -25,13 +26,13 @@ use Elabftw\Interfaces\EntityParamsInterface;
 use Elabftw\Interfaces\ItemTypeParamsInterface;
 use Elabftw\Maps\Team;
 use Elabftw\Services\Check;
-use Elabftw\Services\Email;
 use Elabftw\Services\Filter;
 use Elabftw\Services\Transform;
 use Elabftw\Traits\EntityTrait;
 use function explode;
 use function is_bool;
 use PDO;
+use PDOStatement;
 
 /**
  * The mother class of Experiments, Items, Templates and ItemsTypes
@@ -39,6 +40,12 @@ use PDO;
 abstract class AbstractEntity implements CrudInterface
 {
     use EntityTrait;
+
+    protected const STATE_NORMAL = 1;
+
+    protected const STATE_ARCHIVED = 2;
+
+    protected const STATE_DELETED = 3;
 
     public Comments $Comments;
 
@@ -56,7 +63,10 @@ abstract class AbstractEntity implements CrudInterface
     public string $type = '';
 
     // use that to ignore the canOrExplode calls
-    public bool $bypassPermissions = false;
+    public bool $bypassReadPermission = false;
+
+    // use that to ignore the canOrExplode calls
+    public bool $bypassWritePermission = false;
 
     // will be defined in children classes
     public string $page = '';
@@ -67,18 +77,27 @@ abstract class AbstractEntity implements CrudInterface
     // sql of ids to include
     public string $idFilter = '';
 
-    // inserted in sql
-    public string $titleFilter = '';
-
-    // inserted in sql
-    public string $dateFilter = '';
-
-    // inserted in sql
-    public string $bodyFilter = '';
-
     public bool $isReadOnly = false;
 
     protected TeamGroups $TeamGroups;
+
+    // inserted in sql
+    private string $extendedFilter = '';
+
+    // inserted in sql
+    private array $bindExtendedValues = array();
+
+    private string $metadataFilter = '';
+
+    private string $metadataHaving = '';
+
+    private bool $isMetadataSearch = false;
+
+    private string $metadataKey = '';
+
+    private string $metadataValuePath = '';
+
+    private string $metadataValue = '';
 
     /**
      * Constructor
@@ -93,7 +112,7 @@ abstract class AbstractEntity implements CrudInterface
         $this->Steps = new Steps($this);
         $this->Tags = new Tags($this);
         $this->Uploads = new Uploads($this);
-        $this->Comments = new Comments($this, new Email(Config::getConfig(), $this->Users));
+        $this->Comments = new Comments($this);
         $this->TeamGroups = new TeamGroups($this->Users);
         $this->Pins = new Pins($this);
 
@@ -114,8 +133,8 @@ abstract class AbstractEntity implements CrudInterface
      */
     public function toggleLock(): bool
     {
-        $permissions = $this->getPermissions();
-        if (!$this->Users->userData['can_lock'] && !$permissions['write']) {
+        $this->getPermissions();
+        if (!$this->Users->userData['can_lock'] && $this->entityData['userid'] !== $this->Users->userData['userid']) {
             throw new ImproperActionException(_("You don't have the rights to lock/unlock this."));
         }
         $locked = (int) $this->entityData['locked'];
@@ -175,12 +194,14 @@ abstract class AbstractEntity implements CrudInterface
         $sql = $this->getReadSqlBeforeWhere($extended, $extended);
         $teamgroupsOfUser = array_column($this->TeamGroups->readGroupsFromUser(), 'id');
 
-        // there might or might not be a condition for the WHERE, so make sure there is at least one
-        $sql .= ' WHERE 1=1';
+        // first where is the state
+        $sql .= ' WHERE entity.state = :state';
 
         foreach ($this->filters as $filter) {
             $sql .= sprintf(" AND %s = '%s'", $filter['column'], $filter['value']);
         }
+
+        $sql .= $this->metadataFilter;
 
         // experiments related to something?
         if ($displayParams->searchType === 'related') {
@@ -213,12 +234,11 @@ abstract class AbstractEntity implements CrudInterface
         $sql .= ')';
 
         $sqlArr = array(
-            $this->titleFilter,
-            $this->dateFilter,
-            $this->bodyFilter,
-            Tools::getSearchSql($displayParams->query),
+            $this->extendedFilter,
             $this->idFilter,
-            'GROUP BY id ORDER BY',
+            'GROUP BY id',
+            $this->metadataHaving,
+            'ORDER BY',
             $displayParams->getOrderSql(),
             $displayParams->sort,
             ', entity.id',
@@ -232,6 +252,15 @@ abstract class AbstractEntity implements CrudInterface
 
         $req = $this->Db->prepare($sql);
         $req->bindParam(':userid', $this->Users->userData['userid'], PDO::PARAM_INT);
+        $req->bindValue(':state', self::STATE_NORMAL, PDO::PARAM_INT);
+        if ($this->isMetadataSearch) {
+            $req->bindParam(':metadata_key', $this->metadataKey);
+            $req->bindParam(':metadata_value_path', $this->metadataValuePath);
+            $req->bindParam(':metadata_value', $this->metadataValue);
+        }
+
+        $this->bindExtendedValues($req);
+
         $this->Db->execute($req);
 
         return $this->Db->fetchAll($req);
@@ -267,9 +296,6 @@ abstract class AbstractEntity implements CrudInterface
         $this->Db->execute($req);
 
         $item = $req->fetch();
-        if ($item === false) {
-            throw new ResourceNotFoundException();
-        }
 
         $permissions = $this->getPermissions($item);
         if ($permissions['read'] === false) {
@@ -349,8 +375,11 @@ abstract class AbstractEntity implements CrudInterface
             case 'userid':
                 $content = $params->getUserId();
                 break;
+            case 'state':
+                $content = $params->getState();
+                break;
             default:
-                throw new ImproperActionException('Invalid update target');
+                throw new ImproperActionException('Invalid update target: ' . $params->getTarget());
         }
 
         // save a revision for body target
@@ -371,11 +400,11 @@ abstract class AbstractEntity implements CrudInterface
             $column = 'body';
         }
 
-        $sql = 'UPDATE ' . $this->type . ' SET ' . $column . ' = :content WHERE id = :id';
+        $sql = 'UPDATE ' . $this->type . ' SET ' . $column . ' = :content, lastchangeby = :userid WHERE id = :id';
         $req = $this->Db->prepare($sql);
         $req->bindValue(':content', $content);
         $req->bindParam(':id', $this->id, PDO::PARAM_INT);
-
+        $req->bindParam(':userid', $this->Users->userData['userid'], PDO::PARAM_INT);
         return $this->Db->execute($req);
     }
 
@@ -454,7 +483,10 @@ abstract class AbstractEntity implements CrudInterface
      */
     public function getPermissions(?array $item = null): array
     {
-        if ($this->bypassPermissions) {
+        if ($this->bypassWritePermission) {
+            return array('read' => true, 'write' => true);
+        }
+        if ($this->bypassReadPermission) {
             return array('read' => true, 'write' => false);
         }
         if (empty($this->entityData) && !isset($item)) {
@@ -463,6 +495,11 @@ abstract class AbstractEntity implements CrudInterface
         // don't try to read() again if we have the item (for show where there are several items to check)
         if (!isset($item)) {
             $item = $this->entityData;
+        }
+
+        // if it has the deleted state, don't show it.
+        if ((int) $item['state'] === self::STATE_DELETED) {
+            return array('read' => false, 'write' => false);
         }
 
         $Permissions = new Permissions($this->Users, $item);
@@ -493,7 +530,7 @@ abstract class AbstractEntity implements CrudInterface
      *
      * @param int $category id of the category (status or items types)
      */
-    public function updateCategory(int $category): void
+    public function updateCategory(int $category): bool
     {
         $this->canOrExplode('write');
 
@@ -501,7 +538,7 @@ abstract class AbstractEntity implements CrudInterface
         $req = $this->Db->prepare($sql);
         $req->bindParam(':category', $category, PDO::PARAM_INT);
         $req->bindParam(':id', $this->id, PDO::PARAM_INT);
-        $this->Db->execute($req);
+        return $this->Db->execute($req);
     }
 
     /**
@@ -519,6 +556,17 @@ abstract class AbstractEntity implements CrudInterface
         $column = filter_var($column, FILTER_SANITIZE_STRING);
         $value = filter_var($value, FILTER_SANITIZE_STRING);
         $this->filters[] = array('column' => $column, 'value' => $value);
+    }
+
+    public function addMetadataFilter(string $key, string $value): void
+    {
+        $this->isMetadataSearch = true;
+        // Note: the key is double quoted so spaces are not an issue
+        $this->metadataKey = '$.extra_fields."' . Filter::sanitize($key) . '"';
+        $this->metadataValuePath = $this->metadataKey . '.value';
+        $this->metadataValue = Filter::sanitize($value);
+        $this->metadataFilter = " AND JSON_CONTAINS_PATH(entity.metadata, 'one', :metadata_key) ";
+        $this->metadataHaving = ' HAVING JSON_UNQUOTE(JSON_EXTRACT(entity.metadata, :metadata_value_path)) LIKE :metadata_value';
     }
 
     /**
@@ -557,31 +605,20 @@ abstract class AbstractEntity implements CrudInterface
     }
 
     /**
-     * Get token and pdf info for displaying in view mode
+     * Get timestamper full name for display in view mode
      */
-    public function getTimestampInfo(): array
+    public function getTimestamperFullname(): string
     {
         if ($this instanceof Items || $this->entityData['timestamped'] === '0') {
-            return array();
+            return 'Unknown';
         }
-        $timestamper = new Users((int) $this->entityData['timestampedby']);
-
-        $Uploads = new Uploads(new Experiments($this->Users, (int) $this->entityData['id']));
-        $Uploads->Entity->type = 'exp-pdf-timestamp';
-        $pdf = $Uploads->readAll();
-
-        $Uploads->Entity->type = 'timestamp-token';
-        $token = $Uploads->readAll();
-
-        $Uploads->Entity->type = 'bloxberg-proof';
-        $bloxbergProof = $Uploads->readAll();
-
-        return array(
-            'timestamper' => $timestamper->userData,
-            'pdf' => $pdf,
-            'token' => $token,
-            'bloxbergProof' => $bloxbergProof,
-        );
+        // maybe user was deleted!
+        try {
+            $timestamper = new Users((int) $this->entityData['timestampedby']);
+        } catch (ResourceNotFoundException $e) {
+            return 'User not found!';
+        }
+        return $timestamper->userData['fullname'];
     }
 
     /**
@@ -602,6 +639,31 @@ abstract class AbstractEntity implements CrudInterface
     public function getTable(): string
     {
         return $this->type;
+    }
+
+    public function getIdFromCategory(int $category): array
+    {
+        $sql = 'SELECT id FROM ' . $this->getTable() . ' WHERE team = :team AND category = :category';
+        $req = $this->Db->prepare($sql);
+        $req->bindParam(':team', $this->Users->team, PDO::PARAM_INT);
+        $req->bindParam(':category', $category);
+        $req->execute();
+        $res = $this->Db->fetchAll($req);
+        return array_column($res, 'id');
+    }
+
+    public function addToExtendedFilter(string $extendedFilter, array $bindExtendedValues = array()): void
+    {
+        $this->extendedFilter .= $extendedFilter . ' ';
+        $this->bindExtendedValues = array_merge($this->bindExtendedValues, $bindExtendedValues);
+    }
+
+    public function destroy(): bool
+    {
+        $this->canOrExplode('write');
+
+        // set state to deleted
+        return $this->update(new EntityParams((string) self::STATE_DELETED, 'state'));
     }
 
     /**
@@ -646,6 +708,11 @@ abstract class AbstractEntity implements CrudInterface
                 entity.canread,
                 entity.canwrite,
                 entity.lastchange,';
+            // don't include the metadata column unless we really need it
+            // see https://stackoverflow.com/questions/29575835/error-1038-out-of-sort-memory-consider-increasing-sort-buffer-size
+            if ($this->isMetadataSearch) {
+                $select .= 'entity.metadata,';
+            }
         }
         $select .= "uploads.up_item_id, uploads.has_attachment,
             SUBSTRING_INDEX(GROUP_CONCAT(stepst.next_step ORDER BY steps_ordering, steps_id SEPARATOR '|'), '|', 1) AS next_step,
@@ -734,5 +801,12 @@ abstract class AbstractEntity implements CrudInterface
 
         // replace all %1$s by 'experiments' or 'items'
         return sprintf(implode(' ', $sqlArr), $this->type);
+    }
+
+    private function bindExtendedValues(PDOStatement $req): void
+    {
+        foreach ($this->bindExtendedValues as $bindValue) {
+            $req->bindValue($bindValue['param'], $bindValue['value'], $bindValue['type']);
+        }
     }
 }

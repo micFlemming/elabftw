@@ -74,7 +74,7 @@ class Links implements CrudInterface
             LEFT JOIN items ON (' . $this->Entity->type . '_links.link_id = items.id)
             LEFT JOIN items_types AS category ON (items.category = category.id)
             WHERE ' . $this->Entity->type . '_links.item_id = :id
-            ORDER by category.name ASC, items.title ASC';
+            ORDER by category.name ASC, items.date ASC, items.title ASC';
         $req = $this->Db->prepare($sql);
         $req->bindParam(':id', $this->Entity->id, PDO::PARAM_INT);
         $this->Db->execute($req);
@@ -159,7 +159,7 @@ class Links implements CrudInterface
     {
         $table = $this->Entity->type;
         if ($fromTpl) {
-            $table = 'experiments_templates';
+            $table = $this->Entity instanceof Experiments ? 'experiments_templates' : 'items_types';
         }
         $linksql = 'SELECT link_id FROM ' . $table . '_links WHERE item_id = :id';
         $linkreq = $this->Db->prepare($linksql);
@@ -169,10 +169,9 @@ class Links implements CrudInterface
         while ($links = $linkreq->fetch()) {
             $sql = 'INSERT INTO ' . $this->Entity->type . '_links (link_id, item_id) VALUES(:link_id, :item_id)';
             $req = $this->Db->prepare($sql);
-            $this->Db->execute($req, array(
-                'link_id' => $links['link_id'],
-                'item_id' => $newId,
-            ));
+            $req->bindParam(':link_id', $links['link_id'], PDO::PARAM_INT);
+            $req->bindParam(':item_id', $newId, PDO::PARAM_INT);
+            $this->Db->execute($req);
         }
     }
 

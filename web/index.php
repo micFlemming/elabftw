@@ -33,8 +33,16 @@ try {
 
         $AuthResponse = $AuthService->assertIdpResponse();
 
+        // no team was found so user must select one
+        if ($AuthResponse->initTeamRequired) {
+            $App->Session->set('initial_team_selection_required', true);
+            $App->Session->set('teaminit_email', $AuthResponse->initTeamUserInfo['email']);
+            $App->Session->set('teaminit_firstname', $AuthResponse->initTeamUserInfo['firstname']);
+            $App->Session->set('teaminit_lastname', $AuthResponse->initTeamUserInfo['lastname']);
+            $location = '../../login.php';
+
         // if the user is in several teams, we need to redirect to the team selection
-        if ($AuthResponse->isInSeveralTeams) {
+        } elseif ($AuthResponse->isInSeveralTeams) {
             $App->Session->set('team_selection_required', true);
             $App->Session->set('team_selection', $AuthResponse->selectableTeams);
             $App->Session->set('auth_userid', $AuthResponse->userid);
@@ -43,7 +51,7 @@ try {
             $LoginHelper = new LoginHelper($AuthResponse, $App->Session);
             $LoginHelper->login((bool) $App->Request->cookies->get('icanhazcookies'));
         }
-        $location = $App->Request->cookies->get('redirect') ?? $location;
+        // the redirect cookie is ignored for saml auth. See #2438.
         // we don't use a RedirectResponse but show a temporary redirection page or it will not work properly
         echo "<html><head><meta http-equiv='refresh' content='1;url=$location' /><title>You are being redirected...</title></head><body>You are being redirected...</body></html>";
         exit;

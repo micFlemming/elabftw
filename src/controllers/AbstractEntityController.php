@@ -16,13 +16,20 @@ use Elabftw\Elabftw\DisplayParams;
 use Elabftw\Elabftw\Tools;
 use Elabftw\Exceptions\ImproperActionException;
 use Elabftw\Interfaces\ControllerInterface;
+use Elabftw\Maps\Team;
 use Elabftw\Models\AbstractEntity;
 use Elabftw\Models\Experiments;
+use Elabftw\Models\FavTags;
+use Elabftw\Models\ItemsTypes;
 use Elabftw\Models\Revisions;
 use Elabftw\Models\TeamGroups;
 use Elabftw\Models\Templates;
+use Elabftw\Models\Users;
+use Elabftw\Services\AdvancedSearchQuery;
+use Elabftw\Services\AdvancedSearchQuery\Visitors\VisitorParameters;
 use Elabftw\Services\Check;
 use Symfony\Component\HttpFoundation\Response;
+use function trim;
 
 /**
  * For experiments.php
@@ -62,47 +69,50 @@ abstract class AbstractEntityController implements ControllerInterface
      */
     public function show(bool $isSearchPage = false): Response
     {
+        // create the DisplayParams object from the query
+        $DisplayParams = new DisplayParams();
+        $DisplayParams->adjust($this->App);
+
         // VISIBILITY LIST
-        $TeamGroups = new TeamGroups($this->Entity->Users);
+        $visibilityArr = (new TeamGroups($this->Entity->Users))->getVisibilityList();
 
         // CATEGORY FILTER
         if (Check::id((int) $this->App->Request->query->get('cat')) !== false) {
             $this->Entity->addFilter('categoryt.id', $this->App->Request->query->getDigits('cat'));
+            $DisplayParams->searchType = 'category';
         }
         // OWNER (USERID) FILTER
         if ($this->App->Request->query->has('owner') && !$isSearchPage) {
             $owner = (int) $this->App->Request->query->get('owner');
             $this->Entity->addFilter('entity.userid', (string) $owner);
+            $DisplayParams->searchType = 'user';
         }
 
         // TAG FILTER
-        if (!empty(((array) $this->App->Request->query->get('tags'))[0])) {
+        if (!empty(((array) $this->App->Request->query->all('tags'))[0])) {
             // get all the ids with that tag
-            $tagsFromGet = (array) $this->App->Request->query->get('tags');
+            $tagsFromGet = (array) $this->App->Request->query->all('tags');
             $tagsFromGet = array_map(function ($t) {
                 return (string) $t;
             }, $tagsFromGet);
             $ids = $this->Entity->Tags->getIdFromTags($tagsFromGet, (int) $this->App->Users->userData['team']);
-            $idFilter = ' AND (';
-            foreach ($ids as $id) {
-                $idFilter .= 'entity.id = ' . $id . ' OR ';
-            }
-            $trimmedFilter = rtrim($idFilter, ' OR ') . ')';
+            $trimmedFilter = Tools::getIdFilterSql($ids);
             // don't add it if it's empty (for instance we search in items for a tag that only exists on experiments)
             if ($trimmedFilter === ' AND ()') {
-                throw new ImproperActionException(_("Sorry. I couldn't find anything :("));
+                $this->Entity->idFilter = ' AND entity.id = 0';
+            } else {
+                $this->Entity->idFilter = $trimmedFilter;
             }
-            $this->Entity->idFilter = $trimmedFilter;
+            $DisplayParams->searchType = 'tags';
         }
-
-        // create the DisplayParams object from the query
-        $DisplayParams = new DisplayParams();
-        $DisplayParams->adjust($this->App);
 
         // only show public to anon
         if ($this->App->Session->get('is_anon')) {
             $this->Entity->addFilter('entity.canread', 'public');
         }
+
+        // Quicksearch
+        $extendedError = $this->prepareAdvancedSearchQuery($visibilityArr);
 
         $itemsArr = $this->getItemsArr();
         // get tags separately
@@ -116,12 +126,18 @@ abstract class AbstractEntityController implements ControllerInterface
         // store the query parameters in the Session
         $this->App->Session->set('lastquery', $this->App->Request->query->all());
 
+        // FAVTAGS
+        $FavTags = new FavTags($this->App->Users);
+        $favTagsArr = $FavTags->read(new ContentParams());
+
         $template = 'show.html';
 
         $renderArr = array(
             'DisplayParams' => $DisplayParams,
             'Entity' => $this->Entity,
             'categoryArr' => $this->categoryArr,
+            'deletableXp' => $this->getDeletableXp(),
+            'favTagsArr' => $favTagsArr,
             'pinnedArr' => $this->Entity->Pins->getPinned(),
             'itemsArr' => $itemsArr,
             // generate light show page
@@ -130,7 +146,8 @@ abstract class AbstractEntityController implements ControllerInterface
             'tagsArr' => $tagsArr,
             'tagsArrForSelect' => $tagsArrForSelect,
             'templatesArr' => $this->Templates->readForUser(),
-            'visibilityArr' => $TeamGroups->getVisibilityList(),
+            'visibilityArr' => $visibilityArr,
+            'extendedError' => $extendedError,
         );
         $Response = new Response();
         $Response->prepare($this->App->Request);
@@ -172,8 +189,8 @@ abstract class AbstractEntityController implements ControllerInterface
             'revNum' => $Revisions->readCount(),
             'stepsArr' => $this->Entity->Steps->read(new ContentParams()),
             'templatesArr' => $this->Templates->readForUser(),
-            'timestampInfo' => $this->Entity->getTimestampInfo(),
-            'uploadsArr' => $this->Entity->Uploads->readAll(),
+            'timestamperFullname' => $this->Entity->getTimestamperFullname(),
+            'uploadsArr' => $this->Entity->Uploads->readAllNormal(),
         );
 
         // RELATED ITEMS AND EXPERIMENTS
@@ -203,6 +220,19 @@ abstract class AbstractEntityController implements ControllerInterface
             throw new ImproperActionException(_('This item is locked. You cannot edit it!'));
         }
 
+        // last modifier name
+        $lastModifierFullname = '';
+        if ($this->Entity->entityData['lastchangeby'] !== null) {
+            $lastModifier = new Users((int) $this->Entity->entityData['lastchangeby']);
+            $lastModifierFullname = $lastModifier->userData['fullname'];
+        }
+
+
+        // the items categoryArr for add link input
+        $ItemsTypes = new ItemsTypes($this->App->Users);
+        $itemsCategoryArr = $ItemsTypes->readAll();
+
+
         // REVISIONS
         $Revisions = new Revisions(
             $this->Entity,
@@ -219,14 +249,17 @@ abstract class AbstractEntityController implements ControllerInterface
         $renderArr = array(
             'Entity' => $this->Entity,
             'categoryArr' => $this->categoryArr,
+            'deletableXp' => $this->getDeletableXp(),
+            'itemsCategoryArr' => $itemsCategoryArr,
             'lang' => Tools::getCalendarLang($this->App->Users->userData['lang'] ?? 'en_GB'),
+            'lastModifierFullname' => $lastModifierFullname,
             'linksArr' => $this->Entity->Links->read(new ContentParams()),
             'maxUploadSize' => Tools::getMaxUploadSize(),
             'mode' => 'edit',
             'revNum' => $Revisions->readCount(),
             'stepsArr' => $this->Entity->Steps->read(new ContentParams()),
             'templatesArr' => $this->Templates->readForUser(),
-            'uploadsArr' => $this->Entity->Uploads->readAll(),
+            'uploadsArr' => $this->Entity->Uploads->readAllNormal(),
             'visibilityArr' => $TeamGroups->getVisibilityList(),
         );
 
@@ -234,5 +267,42 @@ abstract class AbstractEntityController implements ControllerInterface
         $Response->prepare($this->App->Request);
         $Response->setContent($this->App->render($template, $renderArr));
         return $Response;
+    }
+
+    /**
+     * Can we delete experiments? This is used to disable the Delete button in menu.
+     */
+    private function getDeletableXp(): bool
+    {
+        // get the config option from team setting
+        $Team = new Team($this->App->Users->team);
+        $deletableXp = (bool) $Team->getDeletableXp();
+        // general config will override the team config only if it's more restrictive
+        if ($this->App->Config->configArr['deletable_xp'] === '0') {
+            $deletableXp = false;
+        }
+        // an admin is able to delete
+        if ($this->App->Users->userData['is_admin']) {
+            $deletableXp = true;
+        }
+        return $deletableXp;
+    }
+
+    private function prepareAdvancedSearchQuery(array $visibilityArr): string
+    {
+        $searchException = '';
+        if ($this->App->Request->query->has('q') && !empty($this->App->Request->query->get('q'))) {
+            $query = trim((string) $this->App->Request->query->get('q'));
+
+            $advancedQuery = new AdvancedSearchQuery($query, new VisitorParameters($this->Entity->type, $visibilityArr));
+            $whereClause = $advancedQuery->getWhereClause();
+            if ($whereClause) {
+                $this->Entity->addToExtendedFilter($whereClause['where'], $whereClause['bindValues']);
+            }
+
+            $searchException = $advancedQuery->getException();
+        }
+
+        return $searchException === '' ? '' : 'Search error: ' . $searchException;
     }
 }

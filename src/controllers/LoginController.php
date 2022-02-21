@@ -16,6 +16,7 @@ use Elabftw\Elabftw\App;
 use Elabftw\Elabftw\Saml;
 use Elabftw\Exceptions\ImproperActionException;
 use Elabftw\Exceptions\InvalidDeviceTokenException;
+use Elabftw\Exceptions\ResourceNotFoundException;
 use Elabftw\Interfaces\AuthInterface;
 use Elabftw\Interfaces\ControllerInterface;
 use Elabftw\Models\ExistingUser;
@@ -106,6 +107,23 @@ class LoginController implements ControllerInterface
         );
         setcookie('icanhazcookies', $icanhazcookies, $cookieOptions);
 
+        // INITIAL TEAM SELECTION
+        if ($authType === 'teaminit' && $this->App->Session->get('initial_team_selection_required')) {
+            // create an unvalidated user in the requested team
+            ExistingUser::fromScratch(
+                $this->App->Session->get('teaminit_email'),
+                array((int) $this->App->Request->request->get('team_id')),
+                (string) $this->App->Request->request->get('teaminit_firstname'),
+                (string) $this->App->Request->request->get('teaminit_lastname'),
+            );
+            $this->App->Session->set('teaminit_done', true);
+            $this->App->Session->remove('initial_team_selection_required');
+            $location = '../../login.php';
+            echo "<html><head><meta http-equiv='refresh' content='1;url=$location' /><title>You are being redirected...</title></head><body>You are being redirected...</body></html>";
+            exit;
+        }
+
+
         // try to authenticate
         $AuthResponse = $this->getAuthService($authType)->tryAuth();
 
@@ -146,7 +164,7 @@ class LoginController implements ControllerInterface
         $this->App->Session->remove('auth_userid');
 
         return new RedirectResponse(
-            (string) ($this->App->Request->cookies->get('redirect') ?? '../../experiments.php')
+            (string) ($this->App->Request->cookies->get('elab_redirect') ?? '../../experiments.php')
         );
     }
 
@@ -169,7 +187,12 @@ class LoginController implements ControllerInterface
         }
         // if the token is not valid, verify we can login from untrusted devices for that user
         if ($isTokenValid === false) {
-            $Users = ExistingUser::fromEmail((string) $this->App->Request->request->get('email'));
+            // email might be for non existing user, which will throw exception
+            try {
+                $Users = ExistingUser::fromEmail((string) $this->App->Request->request->get('email'));
+            } catch (ResourceNotFoundException $e) {
+                throw new InvalidDeviceTokenException();
+            }
             // check if authentication is locked for untrusted clients for that user
             if ($Users->allowUntrustedLogin() === false) {
                 // reject any attempt whatsoever if this account is locked for untrusted devices

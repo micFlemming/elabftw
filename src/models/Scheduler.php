@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * @author Nicolas CARPi <nico-git@deltablot.email>
  * @copyright 2012 Nicolas CARPi
@@ -6,7 +6,6 @@
  * @license AGPL-3.0
  * @package elabftw
  */
-declare(strict_types=1);
 
 namespace Elabftw\Models;
 
@@ -15,7 +14,6 @@ use Elabftw\Elabftw\Db;
 use Elabftw\Elabftw\Tools;
 use Elabftw\Exceptions\IllegalActionException;
 use Elabftw\Exceptions\ImproperActionException;
-use Elabftw\Exceptions\ResourceNotFoundException;
 use Elabftw\Services\TeamsHelper;
 use Elabftw\Traits\EntityTrait;
 use PDO;
@@ -46,6 +44,9 @@ class Scheduler
     public function create(string $start, string $end, string $title): int
     {
         $title = filter_var($title, FILTER_SANITIZE_STRING);
+
+        $start = $this->normalizeDate($start);
+        $end = $this->normalizeDate($end, true);
 
         // fix booking at midnight on monday not working. See #2765
         // we add a second so it works
@@ -131,13 +132,7 @@ class Scheduler
         $req = $this->Db->prepare($sql);
         $req->bindParam(':id', $this->id, PDO::PARAM_INT);
         $this->Db->execute($req);
-
-        $res = $req->fetch();
-        if ($res === false) {
-            throw new ResourceNotFoundException();
-        }
-
-        return $res;
+        return $this->Db->fetch($req);
     }
 
     /**
@@ -232,6 +227,27 @@ class Scheduler
         $req = $this->Db->prepare($sql);
         $req->bindParam(':id', $this->id, PDO::PARAM_INT);
         $this->Db->execute($req);
+    }
+
+    /**
+     * Date can be Y-m-d or ISO::8601
+     * Make sure we have the time, too
+     */
+    private function normalizeDate(string $date, bool $rmDay = false): string
+    {
+        if (DateTime::createFromFormat(DateTime::ISO8601, $date) === false) {
+            $dateOnly = DateTime::createFromFormat('Y-m-d', $date);
+            if ($dateOnly === false) {
+                throw new ImproperActionException('Could not understand date format!');
+            }
+            $dateOnly->setTime(0, 1);
+            // we don't want the end date to go over one day
+            if ($rmDay) {
+                $dateOnly->modify('-3min');
+            }
+            return $dateOnly->format(DateTime::ISO8601);
+        }
+        return $date;
     }
 
     /**

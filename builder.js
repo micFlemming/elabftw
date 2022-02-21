@@ -15,6 +15,7 @@ const path = require('path');
 const webpack = require('webpack');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const CssMinimizerPlugin = require('css-minimizer-webpack-plugin');
+const TerserPlugin = require('terser-webpack-plugin');
 
 module.exports = {
   entry: {
@@ -31,7 +32,6 @@ module.exports = {
       './src/ts/todolist.ts',
       './src/ts/ucp.ts',
       './src/ts/view.ts',
-      './src/ts/comments.ts',
       './src/ts/editusers.ts',
       './src/ts/search.ts',
       './src/ts/show.ts',
@@ -87,8 +87,10 @@ module.exports = {
       chunks: 'all',
       name: 'vendor'
     },
+    minimize: true,
     minimizer: [
       new CssMinimizerPlugin(),
+      new TerserPlugin(),
     ],
   },
   watchOptions: {

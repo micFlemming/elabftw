@@ -9,10 +9,10 @@ import $ from 'jquery';
 import { Ajax } from './Ajax.class';
 import 'bootstrap-select';
 import 'bootstrap/js/src/modal.js';
-import { notif, makeSortableGreatAgain } from './misc';
+import { notif, makeSortableGreatAgain, reloadElement } from './misc';
 import i18next from 'i18next';
 import EntityClass from './Entity.class';
-import { EntityType, Payload, Method, Model, Action } from './interfaces';
+import { EntityType, Payload, Target, Method, Model, Action } from './interfaces';
 import 'bootstrap-markdown-fa5/js/bootstrap-markdown';
 import 'bootstrap-markdown-fa5/locale/bootstrap-markdown.de.js';
 import 'bootstrap-markdown-fa5/locale/bootstrap-markdown.es.js';
@@ -40,6 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(() => {
       fetch('app/controllers/HeartBeat.php').then(response => {
         if (!response.ok) {
+          localStorage.clear();
           alert('Your session expired!');
           window.location.replace('login.php');
         }
@@ -121,6 +122,87 @@ document.addEventListener('DOMContentLoaded', () => {
   observer.observe(document.querySelector('footer'));
   // END BACK TO TOP BUTTON
 
+  // Add a listener for all elements triggered by an event
+  // and POST an update request
+  // select will be on change, text inputs on blur
+  function listenTrigger(): void {
+    document.querySelectorAll('[data-trigger]').forEach((el: HTMLInputElement) => {
+      el.addEventListener(el.dataset.trigger, event => {
+        event.preventDefault();
+        // for a checkbox element, look at the checked attribute, not the value
+        const value = el.type === 'checkbox' ? el.checked ? '1' : '0' : el.value;
+        const payload: Payload = {
+          method: Method.POST,
+          action: el.dataset.action as Action ?? Action.Update,
+          model: el.dataset.model as Model,
+          target: el.dataset.target as Target,
+          content: value,
+          notif: true,
+        };
+        (new Ajax()).send(payload)
+          .then(json => notif(json))
+          .then(() => {
+            if (el.dataset.reload) {
+              reloadElement(el.dataset.reload).then(() => {
+                // make sure we listen to the new element too
+                listenTrigger();
+              });
+            }
+          });
+      });
+    });
+  }
+  listenTrigger();
+
+  /**
+   * Timestamp provider select
+   */
+  if (document.getElementById('ts_authority')) {
+    const select = (document.getElementById('ts_authority') as HTMLSelectElement);
+    const noAccountTsa = ['dfn', 'digicert', 'sectigo', 'globalsign'];
+    select.addEventListener('change', () => {
+      if (noAccountTsa.includes(select.value)) {
+        // mask all
+        document.getElementById('ts_loginpass').toggleAttribute('hidden', true);
+        document.getElementById('ts_urldiv').toggleAttribute('hidden', true);
+      } else if (select.value === 'universign') {
+        // only make loginpass visible
+        document.getElementById('ts_loginpass').removeAttribute('hidden');
+        document.getElementById('ts_urldiv').toggleAttribute('hidden', true);
+      } else if (select.value === 'custom') {
+        // show all
+        document.getElementById('ts_loginpass').removeAttribute('hidden');
+        document.getElementById('ts_urldiv').removeAttribute('hidden');
+      }
+    });
+  }
+
+  /**
+   * All elements that have a save-hidden data attribute have their visibility depend on the saved state
+   * in localStorage. The localStorage key is the value of the save-hidden data attribute.
+   */
+  document.querySelectorAll('[data-save-hidden]').forEach(el => {
+    const localStorageKey = (el as HTMLElement).dataset.saveHidden + '-isHidden';
+    if (localStorage.getItem(localStorageKey) === '1') {
+      el.setAttribute('hidden', 'hidden');
+    // make sure to explicitely check for the value, because the key might not exist!
+    } else if (localStorage.getItem(localStorageKey) === '0') {
+      el.removeAttribute('hidden');
+    }
+  });
+  /**
+   * Make sure the icon for toggle-next is correct depending on the stored state in localStorage
+   */
+  document.querySelectorAll('[data-icon]').forEach(el => {
+    const iconEl = document.getElementById((el as HTMLElement).dataset.icon);
+    if (el.nextElementSibling.hasAttribute('hidden')) {
+      iconEl.classList.remove('fa-chevron-circle-down');
+      iconEl.classList.add('fa-chevron-circle-right');
+    } else {
+      iconEl.classList.add('fa-chevron-circle-down');
+      iconEl.classList.remove('fa-chevron-circle-right');
+    }
+  });
 
   /**
    * MAIN click event listener bound to container
@@ -144,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         (document.getElementById('privacyModalBody') as HTMLDivElement).innerHTML = policy;
         // modal plugin requires jquery
-        ($('#privacyModal') as any).modal('toggle');
+        ($('#privacyModal') as JQuery).modal('toggle');
       });
 
     // SCROLL TO TOP
@@ -154,9 +236,26 @@ document.addEventListener('DOMContentLoaded', () => {
         behavior: 'smooth',
       });
 
-    // TOGGLE NEXT ACTION
+    /* TOGGLE NEXT ACTION
+     * An element with "toggle-next" as data-action value will appear clickable.
+     * Clicking on it will toggle the "hidden" attribute of the next sibling element.
+     * If there is a data-icon value, it is split on '-' and the first part is the type of icon
+     * and second part is the id of the icon so the css classes can be toggled
+     */
     } else if (el.matches('[data-action="toggle-next"]')) {
-      el.nextElementSibling.toggleAttribute('hidden');
+      const targetEl = el.nextElementSibling as HTMLElement;
+      targetEl.toggleAttribute('hidden');
+      if (el.dataset.icon) {
+        const iconEl = document.getElementById(el.dataset.icon);
+        iconEl.classList.toggle('fa-chevron-circle-right');
+        iconEl.classList.toggle('fa-chevron-circle-down');
+      }
+      // save the hidden state of the target element in localStorage
+      if (targetEl.dataset.saveHidden) {
+        const targetKey = targetEl.dataset.saveHidden + '-isHidden';
+        const value = targetEl.hasAttribute('hidden') ? '1' : '0';
+        localStorage.setItem(targetKey, value);
+      }
 
     // TOGGLE MODAL
     } else if (el.matches('[data-action="toggle-modal"]')) {
@@ -185,15 +284,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // LOGOUT
     } else if (el.matches('[data-action="logout"]')) {
-      localStorage.removeItem('isTodolistOpen');
+      localStorage.clear();
       window.location.href = 'app/logout.php';
+
+    // ACK NOTIF
+    } else if (el.matches('[data-action="ack-notif"]')) {
+      const payload: Payload = {
+        method: Method.POST,
+        action: Action.Update,
+        model: Model.Notification,
+        // use the finished target of steps for changing is_ack
+        // so we don't need to add another target
+        target: Target.Finished,
+        id: parseInt(el.dataset.id, 10),
+      };
+      const AjaxC = new Ajax();
+      AjaxC.send(payload).then(() => {
+        if (el.dataset.href) {
+          window.location.href = el.dataset.href;
+        }
+      });
+
+    // DESTROY (clear all) NOTIF
+    } else if (el.matches('[data-action="destroy-notif"]')) {
+      const payload: Payload = {
+        method: Method.POST,
+        action: Action.Destroy,
+        model: Model.Notification,
+      };
+      const AjaxC = new Ajax();
+      AjaxC.send(payload).then(() => {
+        document.querySelectorAll('.notification').forEach(el => el.remove());
+      });
 
     // CREATE EXPERIMENT or DATABASE item: main create button in top right
     } else if (el.matches('[data-action="create-entity"]')) {
       const path = window.location.pathname;
       if (path.split('/').pop() === 'experiments.php') {
         const tplid = el.dataset.tplid;
-        (new EntityClass(EntityType.Experiment)).create(tplid).then(json => {
+        const urlParams = new URLSearchParams(document.location.search);
+        const tags = urlParams.getAll('tags[]');
+        (new EntityClass(EntityType.Experiment)).create(tplid, tags).then(json => {
           if (json.res) {
             window.location.replace(`?mode=edit&id=${json.value}`);
           } else {
@@ -203,11 +334,13 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         // for database items, show a selection modal
         // modal plugin requires jquery
-        ($('#createModal') as any).modal('toggle');
+        ($('#createModal') as JQuery).modal('toggle');
       }
     } else if (el.matches('[data-action="create-item"]')) {
       const tplid = el.dataset.tplid;
-      (new EntityClass(EntityType.Item)).create(tplid).then(json => window.location.replace(`?mode=edit&id=${json.value}`));
+      const urlParams = new URLSearchParams(document.location.search);
+      const tags = urlParams.getAll('tags[]');
+      (new EntityClass(EntityType.Item)).create(tplid, tags).then(json => window.location.replace(`?mode=edit&id=${json.value}`));
     }
   });
 });

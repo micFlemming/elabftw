@@ -11,6 +11,7 @@ declare(strict_types=1);
 namespace Elabftw\Commands;
 
 use const DB_NAME;
+use Elabftw\Elabftw\ContentParams;
 use Elabftw\Elabftw\Db;
 use Elabftw\Elabftw\ItemTypeParams;
 use Elabftw\Elabftw\Sql;
@@ -22,8 +23,8 @@ use Elabftw\Models\Teams;
 use Elabftw\Models\Users;
 use Elabftw\Services\Populate;
 use function is_string;
-use League\Flysystem\Adapter\Local;
 use League\Flysystem\Filesystem as Fs;
+use League\Flysystem\Local\LocalFilesystemAdapter;
 use function mb_strlen;
 use function str_repeat;
 use Symfony\Component\Console\Command\Command;
@@ -104,13 +105,13 @@ class PopulateDatabase extends Command
         $configArr['smtp_password'] = $input->getOption('smtppass') ?? 'afakepassword';
         $configArr['smtp_username'] = $input->getOption('smtpuser') ?? 'somesmtpuser';
         $Config = Config::getConfig();
-        $Config->update($configArr);
+        $Config->updateAll($configArr);
 
         // create teams
         $Users = new Users();
         $Teams = new Teams($Users);
         foreach ($yaml['teams'] as $team) {
-            $Teams->create($team);
+            $Teams->create(new ContentParams($team));
         }
 
         $iterations = $yaml['iterations'] ?? self::DEFAULT_ITERATIONS;
@@ -150,7 +151,7 @@ class PopulateDatabase extends Command
     private function dropAndInitDb(): void
     {
         $Db = Db::getConnection();
-        $Sql = new Sql(new Fs(new Local(dirname(__DIR__) . '/sql')));
+        $Sql = new Sql(new Fs(new LocalFilesystemAdapter(dirname(__DIR__) . '/sql')));
         $Db->q('DROP database ' . DB_NAME);
         $Db->q('CREATE database ' . DB_NAME);
         $Db->q('USE ' . DB_NAME);

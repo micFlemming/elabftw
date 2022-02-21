@@ -10,15 +10,16 @@ declare(strict_types=1);
 
 namespace Elabftw\Elabftw;
 
+use function array_map;
 use Elabftw\Models\Config;
-use function explode;
 use function filter_var;
+use function implode;
 use function json_decode;
 use League\CommonMark\Exception\UnexpectedEncodingException;
 use League\CommonMark\GithubFlavoredMarkdownConverter;
 use function mb_strlen;
 use function pathinfo;
-use function str_replace;
+use function rtrim;
 use Symfony\Component\HttpFoundation\Request;
 use function trim;
 
@@ -77,7 +78,7 @@ class Tools
 
         try {
             $converter = new GithubFlavoredMarkdownConverter($config);
-            return trim($converter->convertToHtml($md)->getContent(), "\n");
+            return trim($converter->convert($md)->getContent(), "\n");
         } catch (UnexpectedEncodingException) {
             // fix for incorrect utf8 encoding, just return md and hope it's html
             // so at least the thing is displayed instead of triggering a fatal error
@@ -139,19 +140,6 @@ class Tools
         $sizes = array('B', 'KiB', 'MiB', 'GiB', 'TiB');
         $factor = (int) floor((strlen((string) $bytes) - 1) / 3);
         return sprintf('%.2f', $bytes / 1024** $factor) . ' ' . $sizes[$factor];
-    }
-
-    /**
-     * Take a 8 digits input and output 2014.08.16
-     *
-     * @param string $date Input date '20140302'
-     * @param string $s an optional param to specify the separator
-     * @return string The formatted string
-     */
-    public static function formatDate(string $date, string $s = '.'): string
-    {
-        // TODO date should not be stored as an int in mysql, it creates issues like #2910
-        return $date[0] . $date[1] . $date[2] . $date[3] . $s . $date[4] . $date[5] . $s . $date[6] . $date[7];
     }
 
     /**
@@ -279,63 +267,31 @@ class Tools
     /**
      * Return a full URL of the elabftw install.
      * Will first check for config value of 'url' or try to guess from Request
-     *
      */
-    public static function getUrl(Request $Request, bool $canonical = false): string
+    public static function getUrl(): string
     {
         $Config = Config::getConfig();
 
+        // this might not be set yet
         if ($Config->configArr['url']) {
-            return $Config->configArr['url'];
+            $url = $Config->configArr['url'];
+        } else {
+            $Request = Request::createFromGlobals();
+            // this is only used as fallback because with proxies it can get stuff wrong
+            $url = $Request->getScheme() . '://' . $Request->getHost() . ':' . (string) $Request->getPort();
         }
-        return self::getUrlFromRequest($Request, $canonical);
+        return rtrim($url, '/');
     }
 
-    /**
-     * Get the URL from the Request
-     *
-     */
-    public static function getUrlFromRequest(Request $Request, bool $canonical = false): string
+    public static function getIdFilterSql(array $idArr): string
     {
-        $url = $Request->getScheme() . '://' . $Request->getHost() . ':' . (string) $Request->getPort();
-        if (!$canonical) {
-            $url .= $Request->getBasePath();
-        }
-        return str_replace('app/controllers', '', $url);
-    }
-
-    /**
-     * Build an SQL string for searching something
-     *
-     * @param string $query the searched string
-     * @param string $andor behavior of the space character
-     * @param string $column the column to search into
-     * @param bool $isStrict do we add wildcard characters on each side of the query?
-     */
-    public static function getSearchSql(string $query, string $andor = 'and', string $column = '', bool $isStrict = false): string
-    {
-        $sql = ' AND ';
-        $wildcard = '%';
-        if ($isStrict) {
-            $wildcard = '';
-        }
-        // search character is the separator for and/or
-        $qArr = explode(' ', $query);
-        $sql .= '(';
-        foreach ($qArr as $key => $value) {
-            // add the andor after the first
-            if ($key !== 0) {
-                $sql .= $andor;
-            }
-            if ($column === '') {
-                // do quicksearch
-                $sql .= "(entity.title LIKE '%$value%' OR entity.date LIKE '%$value%' OR entity.body LIKE '%$value%' OR entity.elabid LIKE '%$value%')";
-            } else {
-                // from search page
-                $sql .= 'entity.' . $column . " LIKE '" . $wildcard . $value . $wildcard . "'";
-            }
-        }
-        return $sql . ')';
+        $sql = array_map(
+            function (string $id): string {
+                return 'entity.id = ' . $id;
+            },
+            $idArr
+        );
+        return ' AND (' . implode(' OR ', $sql) . ')';
     }
 
     /**

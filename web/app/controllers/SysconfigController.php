@@ -35,28 +35,28 @@ try {
     // CLEAR SMTP PASS
     if ($Request->query->get('clearSmtppass')) {
         $tab = '6';
-        $App->Config->update(array('smtp_password' => null));
+        $App->Config->updateAll(array('smtp_password' => null));
     }
     // CLEAR LDAP PASS
     if ($Request->query->get('clearLdappass')) {
         $tab = '10';
-        $App->Config->update(array('ldap_password' => null));
+        $App->Config->updateAll(array('ldap_password' => null));
     }
 
     // ANNOUNCEMENT
     if ($Request->request->has('announcement')) {
         if ($Request->request->has('clear_announcement')) {
-            $App->Config->update(array('announcement' => null));
+            $App->Config->updateAll(array('announcement' => null));
         } else {
-            $App->Config->update(array('announcement' => $Request->request->get('announcement')));
+            $App->Config->updateAll(array('announcement' => $Request->request->get('announcement')));
         }
     }
 
     if ($Request->request->has('login_announcement')) {
         if ($Request->request->has('clear_login_announcement')) {
-            $App->Config->update(array('login_announcement' => null));
+            $App->Config->updateAll(array('login_announcement' => null));
         } else {
-            $App->Config->update(array('login_announcement' => $Request->request->get('login_announcement')));
+            $App->Config->updateAll(array('login_announcement' => $Request->request->get('login_announcement')));
         }
     }
 
@@ -75,10 +75,6 @@ try {
     if ($Request->request->has('updateConfig')) {
         if ($Request->request->has('lang')) {
             $tab = '1';
-        }
-
-        if ($Request->request->has('stampshare')) {
-            $tab = '4';
         }
 
         if ($Request->request->has('admin_validate')) {
@@ -101,7 +97,11 @@ try {
             $tab = '10';
         }
 
-        $App->Config->update($Request->request->all());
+        if ($Request->request->has('uploads_storage')) {
+            $tab = '11';
+        }
+
+        $App->Config->updateAll($Request->request->all());
     }
 
     // ADD USER TO TEAM
@@ -120,12 +120,6 @@ try {
                 array($Request->request->get('team')),
             );
         }
-    }
-
-    // CLEAR STAMP PASS
-    if ($Request->query->get('clearStamppass')) {
-        $tab = '4';
-        $App->Config->destroyStamppass();
     }
 
     $App->Session->getFlashBag()->add('ok', _('Saved'));

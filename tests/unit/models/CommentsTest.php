@@ -10,14 +10,12 @@
 namespace Elabftw\Models;
 
 use Elabftw\Elabftw\ContentParams;
+use Elabftw\Exceptions\IllegalActionException;
 use Elabftw\Exceptions\ImproperActionException;
-use Elabftw\Services\Email;
 
 class CommentsTest extends \PHPUnit\Framework\TestCase
 {
     private Experiments $Entity;
-
-    private Email $mockEmail;
 
     private Comments $Comments;
 
@@ -25,17 +23,7 @@ class CommentsTest extends \PHPUnit\Framework\TestCase
     {
         $this->Entity = new Experiments(new Users(1, 1), 1);
 
-        // create mock object for Email because we don't want to actually send emails
-        $this->mockEmail = $this->getMockBuilder(\Elabftw\Services\Email::class)
-             ->disableOriginalConstructor()
-             ->setMethods(array('send'))
-             ->getMock();
-
-        $this->mockEmail->expects($this->any())
-             ->method('send')
-             ->will($this->returnValue(1));
-
-        $this->Comments = new Comments($this->Entity, $this->mockEmail);
+        $this->Comments = new Comments($this->Entity);
     }
 
     public function testCreate(): void
@@ -61,5 +49,11 @@ class CommentsTest extends \PHPUnit\Framework\TestCase
     {
         $this->Comments->setId(1);
         $this->Comments->destroy();
+    }
+
+    public function testSetWrongId(): void
+    {
+        $this->expectException(IllegalActionException::class);
+        $this->Comments->setId(0);
     }
 }

@@ -85,7 +85,7 @@ CREATE TABLE `config` (
 CREATE TABLE `experiments` (
   `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
   `title` varchar(255) NOT NULL,
-  `date` int(10) UNSIGNED NOT NULL,
+  `date` date NOT NULL,
   `body` mediumtext,
   `category` int(255) UNSIGNED NOT NULL,
   `rating` tinyint(10) UNSIGNED NOT NULL DEFAULT '0',
@@ -102,7 +102,9 @@ CREATE TABLE `experiments` (
   `canwrite` varchar(255) NOT NULL DEFAULT 'user',
   `datetime` timestamp NULL DEFAULT NULL,
   `lastchange` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `lastchangeby` int(10) UNSIGNED NULL DEFAULT NULL,
   `metadata` json NULL DEFAULT NULL,
+  `state` int(10) UNSIGNED NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
@@ -213,7 +215,7 @@ CREATE TABLE `experiments_templates` (
   `team` int(10) UNSIGNED DEFAULT NULL,
   `body` text,
   `title` varchar(255) NOT NULL,
-  `date` int(10) UNSIGNED NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `userid` int(10) UNSIGNED DEFAULT NULL,
   `locked` tinyint(3) UNSIGNED DEFAULT NULL,
   `lockedby` int(10) UNSIGNED DEFAULT NULL,
@@ -221,7 +223,10 @@ CREATE TABLE `experiments_templates` (
   `canread` varchar(255) NOT NULL,
   `canwrite` varchar(255) NOT NULL,
   `ordering` int(10) UNSIGNED DEFAULT NULL,
+  `lastchange` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `lastchangeby` int(10) UNSIGNED NULL DEFAULT NULL,
   `metadata` json NULL DEFAULT NULL,
+  `state` int(10) UNSIGNED NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
@@ -255,6 +260,17 @@ CREATE TABLE `experiments_templates_revisions` (
 --
 
 -- --------------------------------------------------------
+
+--
+-- Table structure for table `favtags2users`
+--
+
+CREATE TABLE `favtags2users` (
+  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `users_id` int UNSIGNED NOT NULL,
+  `tags_id` int UNSIGNED NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --
 -- Table structure for table `groups`
@@ -320,7 +336,7 @@ CREATE TABLE `items` (
   `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
   `team` int(10) UNSIGNED NOT NULL,
   `title` varchar(255) DEFAULT NULL,
-  `date` int(10) UNSIGNED NOT NULL,
+  `date` date NOT NULL,
   `body` mediumtext,
   `elabid` varchar(255) NOT NULL,
   `rating` tinyint(10) UNSIGNED NOT NULL DEFAULT '0',
@@ -333,7 +349,9 @@ CREATE TABLE `items` (
   `canwrite` varchar(255) NOT NULL DEFAULT 'team',
   `available` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
   `lastchange` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `lastchangeby` int(10) UNSIGNED NULL DEFAULT NULL,
   `metadata` json NULL DEFAULT NULL,
+  `state` int(10) UNSIGNED NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
@@ -395,13 +413,17 @@ CREATE TABLE `items_types` (
   `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
   `team` int(10) UNSIGNED NOT NULL,
   `name` varchar(255) NOT NULL,
-  `color` varchar(6) DEFAULT '000000',
-  `template` text,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `color` varchar(6) DEFAULT '29aeb9',
+  `body` text NULL DEFAULT NULL,
   `ordering` int(10) UNSIGNED DEFAULT NULL,
   `bookable` tinyint(1) UNSIGNED DEFAULT '0',
   `canread` varchar(255) NOT NULL DEFAULT 'team',
   `canwrite` varchar(255) NOT NULL DEFAULT 'team',
+  `lastchange` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `lastchangeby` int(10) UNSIGNED NULL DEFAULT NULL,
   `metadata` json NULL DEFAULT NULL,
+  `state` int(10) UNSIGNED NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
@@ -410,6 +432,33 @@ CREATE TABLE `items_types` (
 --   `team`
 --       `teams` -> `id`
 --
+
+--
+-- Table structure for table `items_types_links`
+--
+
+CREATE TABLE `items_types_links` (
+  `id` int UNSIGNED NOT NULL AUTO_INCREMENT,
+  `item_id` int UNSIGNED NOT NULL,
+  `link_id` int UNSIGNED NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `items_types_steps`
+--
+
+CREATE TABLE `items_types_steps` (
+  `id` int UNSIGNED NOT NULL AUTO_INCREMENT,
+  `item_id` int UNSIGNED NOT NULL,
+  `body` text NOT NULL,
+  `ordering` int UNSIGNED DEFAULT NULL,
+  `finished` tinyint(1) NOT NULL DEFAULT '0',
+  `finished_time` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- --------------------------------------------------------
 --
@@ -420,6 +469,23 @@ CREATE TABLE `lockout_devices` (
   `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
   `locked_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `device_token` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+--
+-- Table structure for table `notifications`
+--
+
+CREATE TABLE `notifications` (
+  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `userid` int(10) UNSIGNED NOT NULL,
+  `category` int(10) UNSIGNED NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `send_email` tinyint(1) NOT NULL DEFAULT '0',
+  `email_sent` tinyint(1) NOT NULL DEFAULT '0',
+  `email_sent_at` datetime DEFAULT NULL,
+  `is_ack` tinyint(1) NOT NULL DEFAULT '0',
+  `body` json DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
@@ -506,18 +572,20 @@ CREATE TABLE `teams` (
   `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
   `name` varchar(255) NOT NULL,
   `common_template` text,
-  `deletable_xp` tinyint(1) UNSIGNED NOT NULL DEFAULT 1,
+  `deletable_xp` tinyint(1) UNSIGNED NOT NULL DEFAULT 0,
   `deletable_item` tinyint(1) UNSIGNED NOT NULL DEFAULT 1,
   `user_create_tag` tinyint(1) UNSIGNED NOT NULL DEFAULT 1,
   `force_exp_tpl` tinyint(1) UNSIGNED NOT NULL DEFAULT 0,
   `link_name` text NOT NULL,
   `link_href` text NOT NULL,
   `datetime` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `stamplogin` text,
-  `stamppass` text,
-  `stampprovider` text,
-  `stampcert` text,
-  `stamphash` varchar(10) DEFAULT 'sha256',
+  `ts_authority` varchar(255) NOT NULL DEFAULT 'dfn',
+  `ts_login` varchar(255) NULL DEFAULT NULL,
+  `ts_password` varchar(255) NULL DEFAULT NULL,
+  `ts_url` varchar(255) NULL DEFAULT NULL,
+  `ts_cert` varchar(255) NULL DEFAULT NULL,
+  `ts_hash` varchar(10) NOT NULL DEFAULT 'sha256',
+  `ts_override` tinyint(1) UNSIGNED NOT NULL DEFAULT 0,
   `orgid` varchar(255) DEFAULT NULL,
   `public_db` tinyint(1) UNSIGNED NOT NULL DEFAULT 0,
   `force_canread` varchar(255) NOT NULL DEFAULT 'team',
@@ -613,9 +681,12 @@ CREATE TABLE `uploads` (
   `item_id` int(10) UNSIGNED DEFAULT NULL,
   `userid` text NOT NULL,
   `type` varchar(255) NOT NULL,
-  `datetime` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `hash` varchar(128) DEFAULT NULL,
   `hash_algorithm` varchar(10) DEFAULT NULL,
+  `storage` int(10) UNSIGNED NOT NULL DEFAULT 1,
+  `filesize` int(10) UNSIGNED NULL DEFAULT NULL,
+  `state` int(10) UNSIGNED NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
@@ -676,6 +747,8 @@ CREATE TABLE `users` (
   `display_mode` VARCHAR(2) NOT NULL DEFAULT 'it',
   `last_login` DATETIME NULL DEFAULT NULL,
   `allow_untrusted` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
+  `notif_new_comment` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
+  `notif_new_comment_email` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
   `auth_lock_time` datetime DEFAULT NULL,
   PRIMARY KEY (`userid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
@@ -727,7 +800,8 @@ ALTER TABLE `api_keys`
 -- Indexes for table `experiments`
 --
 ALTER TABLE `experiments`
-  ADD KEY `fk_experiments_users_userid` (`userid`);
+  ADD KEY `fk_experiments_users_userid` (`userid`),
+  ADD KEY `idx_experiments_state` (`state`);
 
 --
 -- Indexes for table `experiments_comments`
@@ -753,13 +827,22 @@ ALTER TABLE `experiments_steps`
 -- Indexes for table `experiments_templates`
 --
 ALTER TABLE `experiments_templates`
-  ADD KEY `fk_experiments_templates_teams_id` (`team`);
+  ADD KEY `fk_experiments_templates_teams_id` (`team`),
+  ADD KEY `idx_experiments_templates_state` (`state`);
+
+--
+-- Indexes for table `favtags2users`
+--
+ALTER TABLE `favtags2users`
+  ADD KEY `fk_favtags2users_tags_id` (`tags_id`),
+  ADD KEY `fk_favtags2users_users_id` (`users_id`);
 
 --
 -- Indexes for table `items`
 --
 ALTER TABLE `items`
-  ADD KEY `fk_items_teams_id` (`team`);
+  ADD KEY `fk_items_teams_id` (`team`),
+  ADD KEY `idx_items_state` (`state`);
 
 --
 -- Indexes for table `items_comments`
@@ -772,7 +855,27 @@ ALTER TABLE `items_comments`
 -- Indexes for table `items_types`
 --
 ALTER TABLE `items_types`
-  ADD KEY `fk_items_types_teams_id` (`team`);
+  ADD KEY `fk_items_types_teams_id` (`team`),
+  ADD KEY `idx_items_types_state` (`state`);
+
+--
+-- Indexes for table `items_types_links`
+--
+ALTER TABLE `items_types_links`
+  ADD KEY `fk_items_types_links_items_id` (`item_id`),
+  ADD KEY `fk_items_types_links_items_id2` (`link_id`);
+
+--
+-- Indexes for table `items_types_steps`
+--
+ALTER TABLE `items_types_steps`
+  ADD KEY `fk_items_types_steps_items_id` (`item_id`);
+
+--
+-- Indexes for table `notifications`
+--
+ALTER TABLE `notifications`
+  ADD KEY `fk_notifications_users_userid` (`userid`);
 
 --
 -- Indexes for table `status`
@@ -863,6 +966,13 @@ ALTER TABLE `experiments_templates_revisions`
   ADD CONSTRAINT `fk_experiments_templates_revisions_users_userid` FOREIGN KEY (`userid`) REFERENCES `users`(`userid`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
+-- Constraints for table `favtags2users`
+--
+ALTER TABLE `favtags2users`
+  ADD CONSTRAINT `fk_favtags2users_tags_id` FOREIGN KEY (`tags_id`) REFERENCES `tags` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_favtags2users_users_id` FOREIGN KEY (`users_id`) REFERENCES `users` (`userid`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
 -- Constraints for table `items`
 --
 ALTER TABLE `items`
@@ -887,6 +997,25 @@ ALTER TABLE `items_revisions`
 --
 ALTER TABLE `items_types`
   ADD CONSTRAINT `fk_items_types_teams_id` FOREIGN KEY (`team`) REFERENCES `teams`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Constraints for table `items_types_links`
+--
+ALTER TABLE `items_types_links`
+  ADD CONSTRAINT `fk_items_types_links_items_id` FOREIGN KEY (`link_id`) REFERENCES `items` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_items_types_links_items_types_id` FOREIGN KEY (`item_id`) REFERENCES `items_types` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Constraints for table `items_types_steps`
+--
+ALTER TABLE `items_types_steps`
+  ADD CONSTRAINT `fk_items_types_steps_items_id` FOREIGN KEY (`item_id`) REFERENCES `items_types` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Constraints for table `notifications`
+--
+ALTER TABLE `notifications`
+  ADD CONSTRAINT `fk_notifications_users_userid` FOREIGN KEY (`userid`) REFERENCES `users` (`userid`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `status`

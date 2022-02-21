@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * @author Nicolas CARPi <nico-git@deltablot.email>
  * @copyright 2012 Nicolas CARPi
@@ -6,7 +6,6 @@
  * @license AGPL-3.0
  * @package elabftw
  */
-declare(strict_types=1);
 
 namespace Elabftw\Elabftw;
 
@@ -19,6 +18,7 @@ use Elabftw\Exceptions\ResourceNotFoundException;
 use Elabftw\Exceptions\UnauthorizedException;
 use Elabftw\Models\AbstractEntity;
 use Elabftw\Models\ApiKeys;
+use Elabftw\Models\Config;
 use Elabftw\Models\Experiments;
 use Elabftw\Models\ItemsTypes;
 use Elabftw\Models\Status;
@@ -26,20 +26,25 @@ use Elabftw\Models\Tags;
 use Elabftw\Models\Teams;
 use Exception;
 use PDOException;
-use Swift_TransportException;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 
+/**
+ * This is the main endpoint for requests. It can deal with json requests or classical forms.
+ */
 require_once dirname(__DIR__) . '/init.inc.php';
 
+// the default response is a failed json response
 $Response = new JsonResponse();
 $Response->setData(array(
     'res' => false,
     'msg' => Tools::error(),
 ));
+// this is the result of the processed action
 $res = '';
 
 try {
+    // first determine which processor we need depending on the request type
     if ($Request->headers->get('Content-Type') === 'application/json') {
         $Processor = new JsonProcessor($App->Users, $Request);
     } elseif ($Request->getMethod() === 'GET') {
@@ -61,13 +66,18 @@ try {
         ) {
         throw new IllegalActionException('Non admin user tried to edit status or items types.');
     }
+    // only sysadmins can update the config
+    if ($action === 'update' && $Model instanceof Config && !$App->Users->userData['is_sysadmin']) {
+        throw new IllegalActionException('Non sysadmin user tried to update instance config.');
+    }
 
-    if ($action === 'create') {
+
+    if ($action === 'create' && !$Model instanceof Config) {
         $res = $Model->create($Params);
         if ($Model instanceof ApiKeys) {
             $res = $Params->getKey();
         }
-    } elseif ($action === 'read') {
+    } elseif ($action === 'read' && !$Model instanceof Config) {
         $res = $Model->read($Params);
     } elseif ($action === 'update') {
         // TODO should not exist, but it's here for now
@@ -86,6 +96,8 @@ try {
             }
         }
         $res = $Model->destroy();
+    } elseif ($action === 'destroystamppass' && ($Model instanceof Config || $Model instanceof Teams)) {
+        $res = $Model->destroyStamppass();
     } elseif ($action === 'duplicate' && $Model instanceof AbstractEntity) {
         $res = $Model->duplicate();
     } elseif ($action === 'deduplicate' && $Model instanceof Tags) {
@@ -94,24 +106,19 @@ try {
         $res = $Model->toggleLock();
     }
 
+    // special case for uploading an edited json file back: it's a POSTed async form
+    // for the rest of the cases, we redirect to the entity page edit mode because IIRC only the attached file update feature will use this
     if ($Processor instanceof FormProcessor && !($Request->request->get('extraParam') === 'jsoneditor')) {
         $Response = new RedirectResponse('../../' . $Processor->Entity->page . '.php?mode=edit&id=' . $Processor->Entity->id);
         $Response->send();
         exit;
     }
+
+    // the value param can hold a value used in the page
     $Response->setData(array(
         'res' => true,
         'msg' => _('Saved'),
         'value' => $res,
-    ));
-} catch (Swift_TransportException $e) {
-    // for swift error, don't display error to user as it might contain sensitive information
-    // but log it and display general error. See #841
-    $App->Log->error('', array('exception' => $e));
-    $Response = new JsonResponse();
-    $Response->setData(array(
-        'res' => false,
-        'msg' => _('Error sending email'),
     ));
 } catch (ImproperActionException | UnauthorizedException | ResourceNotFoundException | PDOException $e) {
     $Response->setData(array(

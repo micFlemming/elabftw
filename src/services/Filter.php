@@ -10,15 +10,15 @@ declare(strict_types=1);
 
 namespace Elabftw\Services;
 
+use function checkdate;
+use Elabftw\Elabftw\FsTools;
 use Elabftw\Exceptions\ImproperActionException;
 use function filter_var;
 use HTMLPurifier;
-use HTMLPurifier_Config;
+use HTMLPurifier_HTML5Config;
 use function htmlspecialchars_decode;
 use function mb_strlen;
-use function strip_tags;
 use function strlen;
-use function strtr;
 use function trim;
 
 /**
@@ -49,32 +49,18 @@ class Filter
     }
 
     /**
-     * Return the current date as YYYYMMDD format if no input
-     * return input if it is a valid date
-     *
-     * @param string|null $input 20160521 or 2020-03-31
+     * Make sure the date is correct (YYYY-MM-DD)
      */
-    public static function kdate(?string $input = null): string
+    public static function kdate(string $input): string
     {
-        if ($input === null) {
-            return date('Ymd');
+        // Check if day/month/year are good
+        $year = (int) substr($input, 0, 4);
+        $month = (int) substr($input, 5, 2);
+        $day = (int) substr($input, 8, 2);
+        if (mb_strlen($input) !== 10 || !checkdate($month, $day, $year)) {
+            return date('Y-m-d');
         }
-        // the date inputs will return YYYY-MM-DD
-        // so strip the '-'
-        $input = strtr($input, array('-' => ''));
-        if (mb_strlen($input) === 8) {
-            // Check if day/month are good (badly)
-            $datemonth = substr($input, 4, 2);
-            $dateday = substr($input, 6, 2);
-            if (($datemonth <= '12')
-                && ($dateday <= '31')
-                && ($datemonth > '0')
-                && ($dateday > '0')) {
-                // SUCCESS on every test
-                return $input;
-            }
-        }
-        return date('Ymd');
+        return $input;
     }
 
     /**
@@ -124,7 +110,7 @@ class Filter
     }
 
     /**
-     * Sanitize body with a white list of allowed html tags.
+     * Sanitize body with a list of allowed html tags.
      *
      * @param string $input Body to sanitize
      * @return string The sanitized body or empty string if there is no input
@@ -134,17 +120,20 @@ class Filter
         if ($input === null) {
             return '';
         }
-        $whitelist = '<div><br><br /><p><sub><img><sup><strong><b><em><u><a><s><font><span><ul><li><ol><dl><dt><dd>
-            <blockquote><h1><h2><h3><h4><h5><h6><hr><table><tr><th><td><code><video><audio><pagebreak><pre>
-            <details><summary><figure><figcaption>';
-        $body = strip_tags($input, $whitelist);
         // use strlen() instead of mb_strlen() because we want the size in bytes
-        if (strlen($body) > self::MAX_BODY_SIZE) {
+        if (strlen($input) > self::MAX_BODY_SIZE) {
             throw new ImproperActionException('Content is too big! Cannot save!');
         }
-        $config = HTMLPurifier_Config::createDefault();
+        // create base config for html5
+        $config = HTMLPurifier_HTML5Config::createDefault();
+        // allow only certain elements
+        $config->set('HTML.Allowed', 'div[class],br,p[class|style],sub,img[src|class],sup,strong,b,em,u,a[href],s,font,span[class|style],ul,li,ol,dl,dt,dd,blockquote,h1,h2,h3,h4,h5,h6,hr,table,tr,th,code,video,audio,pre,details,summary,figure,figcaption');
+        // configure the cache for htmlpurifier
+        $tmpDir = FsTools::getCacheFolder('purifier');
+        $config->set('Cache.SerializerPath', $tmpDir);
+
         $purifier = new HTMLPurifier($config);
-        return $purifier->purify($body);
+        return $purifier->purify($input);
     }
 
     /**

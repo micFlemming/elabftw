@@ -40,13 +40,13 @@
                 <a href='{{ Entity.page }}.php?mode=edit&id={{ item.id }}' class='clickable' title='{{ 'Edit'|trans }}'><i class='fas fa-pencil-alt link-like'></i></a>
               {% endif %}
               <!-- toggle body -->
-              <span data-type='{{ Entity.type }}' data-id='{{ item.id }}' data-randid={{ randomId }} class='toggleBody clickable' title='{{ 'Toggle content'|trans }}'>
+              <span data-type='{{ Entity.type }}' data-id='{{ item.id }}' data-randid={{ randomId }} data-action='toggle-body' class='clickable' title='{{ 'Toggle content'|trans }}'>
                 <i class='fas fa-plus-circle link-like'></i>
               </span>
               <!-- category -->
               <span class='item-category'><a style='color:#{{ item.color }}' href='?cat={{ item.category_id }}'>{{ item.category }}</a></span>
               <!-- date -->
-              <span class='item-date'><i class='far fa-calendar-alt mr-1'></i>{{ item.date|kdate }}</span>
+              <span class='item-date'><i class='far fa-calendar-alt mr-1'></i>{{ item.date|date('Y-m-d') }}</span>
               <!-- timestamp icon -->
               {% if item.timestamped %}
                 <i class='far fa-calendar-check'></i>

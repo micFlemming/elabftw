@@ -11,13 +11,13 @@
           {% set tagsValueArr = templateData.tags|split('|') %}
           {% for key, tag in tagsValueArr %}
             {# the key allows to get the id stored in tagsIdArr #}
-            <a class='tag m-1 tag-delete tagUnreference clickable' data-id='{{ templateData.id }}' data-tagid='{{ tagsIdArr[key] }}'>
+            <a class='tag m-1 tag-delete clickable' data-action='unreference-tag' data-id='{{ templateData.id }}' data-tagid='{{ tagsIdArr[key] }}'>
               {{ tag|raw }}
             </a>
           {% endfor %}
         {% endif %}
       </span>
-      <input type='text' style='width:auto' class='createTagInput ml-1' id='createTagInput_{{ templateData.id }}' data-id='{{ templateData.id }}' placeholder='{{ 'Add a tag'|trans }}' />
+      <input type='text' style='width:auto' data-autocomplete='tags' class='ml-1 createTagInput' id='createTagInput_{{ templateData.id }}' data-id='{{ templateData.id }}' placeholder='{{ 'Add a tag'|trans }}' />
     </div>
   </div>
 
@@ -51,10 +51,12 @@
 <input id='title_input' class='form-control' data-id='{{ templateData.id }}' value='{{ templateData.title|raw }}' />
 {# the id begins with an 'e' because of this https://github.com/tinymce/tinymce/issues/3011#issuecomment-227993762 #}
 <label for='e{{ templateData.id }}'>{{ 'Template content'|trans }}</label>
-<textarea id='e{{ templateData.id }}' class='mceditable' style='height:500px;'>{{ templateData.body }}</textarea><br />
+<div>
+  <textarea id='e{{ templateData.id }}' class='mceditable' style='height:500px;'>{{ templateData.body }}</textarea>
+</div>
 <div class='text-center'>
   <button data-action='update-template' data-id='{{ templateData.id }}' class='button btn btn-primary'>{{ 'Save'|trans }}</button>
 </div>
-{% include('steps-links-edit.html') %}
 {% set mode = 'edit-template' %}
-{{ include('json-editor.html') }}
+{% include 'steps-links-edit.html' %}
+{% include 'json-editor.html' %}

@@ -8,7 +8,7 @@
 import { notif } from './misc';
 import $ from 'jquery';
 import 'jquery-ui/ui/widgets/autocomplete';
-import 'jquery-jeditable/src/jquery.jeditable.js';
+import { Malle } from '@deltablot/malle';
 import TeamGroup from './TeamGroup.class';
 import Status from './Status.class';
 import i18next from 'i18next';
@@ -116,32 +116,38 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // edit the team group name
-  $(document).on('mouseenter', 'h3.teamgroup_name', function() {
-    ($(this) as any).editable(function(value) {
+  const malleableGroupname = new Malle({
+    cancel : i18next.t('cancel'),
+    cancelClasses: ['button', 'btn', 'btn-danger', 'mt-2'],
+    inputClasses: ['form-control'],
+    formClasses: ['mb-3'],
+    fun: (value, original) => {
       const payload: Payload = {
         method: Method.POST,
         action: Action.Update,
         model: Model.TeamGroup,
         content: value,
-        id: $(this).data('id'),
+        id: parseInt(original.dataset.id, 10),
+        notif: true,
       };
-
       AjaxC.send(payload);
-      return (value);
-    }, {
-      indicator : 'Saving...',
-      submit : 'Save',
-      cancel : 'Cancel',
-      cancelcssclass : 'button btn btn-danger',
-      submitcssclass : 'button btn btn-primary',
-      style : 'display:inline',
-    });
-  });
+      return value;
+    },
+    listenOn: '.teamgroup_name.editable',
+    tooltip: i18next.t('click-to-edit'),
+    submit : i18next.t('save'),
+    submitClasses: ['button', 'btn', 'btn-primary', 'mt-2'],
+  }).listen();
+
+  // add an observer so new comments will get an event handler too
+  new MutationObserver(() => {
+    malleableGroupname.listen();
+  }).observe(document.getElementById('team_groups_div'), {childList: true});
 
   // STATUS
   const StatusC = new Status();
 
-  document.getElementById('statusCreate').addEventListener('click', () => {
+  document.querySelector('[data-action="create-status"]').addEventListener('click', () => {
     const content = (document.getElementById('statusName') as HTMLInputElement).value;
     const color = (document.getElementById('statusColor') as HTMLInputElement).value;
     const isTimestampable = (document.getElementById('statusTimestamp') as HTMLInputElement).checked;
@@ -150,7 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  document.querySelectorAll('.statusSave').forEach(el => {
+  document.querySelectorAll('[data-action="update-status"]').forEach(el => {
     el.addEventListener('click', ev => {
       const statusId = parseInt((ev.target as HTMLElement).dataset.statusid);
       const content = (document.getElementById('statusName_' + statusId) as HTMLInputElement).value;
@@ -178,9 +184,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // ITEMS TYPES
   const ItemTypeC = new ItemType();
 
-  // CREATE
-  $('.itemsTypesEditor').hide();
-  $(document).on('click', '#itemsTypesCreate', function() {
+  // UPDATE
+  function itemsTypesUpdate(id: number): void {
     const nameInput = (document.getElementById('itemsTypesName') as HTMLInputElement);
     const name = nameInput.value;
     if (name === '') {
@@ -195,50 +200,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (checkbox) {
       bookable = 1;
     }
-    const template = tinymce.get('itemsTypesTemplate').getContent();
 
-    const canread= (document.getElementById('canread_select') as HTMLSelectElement).value;
-    const canwrite= (document.getElementById('canwrite_select') as HTMLSelectElement).value;
-    // set the editor as non dirty so we can navigate out without a warning to clear
-    tinymce.activeEditor.setDirty(false);
-    // TODO don't reload the whole page, just what we need
-    ItemTypeC.create(name, color, bookable, template, canread, canwrite).then(() => window.location.replace('admin.php?tab=5'));
-  });
-
-  // TOGGLE BODY
-  $(document).on('click', '.itemsTypesShowEditor', function() {
-    ItemTypeC.showEditor($(this).data('id'));
-  });
-
-  // UPDATE
-  $(document).on('click', '.itemsTypesUpdate', function() {
-    const id = $(this).data('id');
-    const nameInput = (document.getElementById('itemsTypesName_' + id) as HTMLInputElement);
-    const name = nameInput.value;
-    if (name === '') {
-      notif({'res': false, 'msg': 'Name cannot be empty'});
-      nameInput.style.borderColor = 'red';
-      nameInput.focus();
-      return;
-    }
-    const color = (document.getElementById('itemsTypesColor_' + id) as HTMLInputElement).value;
-    const checkbox = $('#itemsTypesBookable_' + id).is(':checked');
-    let bookable = 0;
-    if (checkbox) {
-      bookable = 1;
-    }
-
-    const canread = (document.querySelector(`.itemsTypesSelectCanread[data-id="${id}"`) as HTMLSelectElement).value;
-    const canwrite = (document.querySelector(`.itemsTypesSelectCanwrite[data-id="${id}"`) as HTMLSelectElement).value;
-    // if tinymce is hidden, it'll fail to trigger
-    // so we toggle it quickly to grab the content
-    if ($('#itemsTypesTemplate_' + id).is(':hidden')) {
-      ItemTypeC.showEditor(id);
-    }
-    const template = tinymce.get('itemsTypesTemplate_' + id).getContent();
-    $('#itemsTypesEditor_' + id).toggle();
+    const canread = (document.getElementById('itemsTypesCanread') as HTMLSelectElement).value;
+    const canwrite = (document.getElementById('itemsTypesCanwrite') as HTMLSelectElement).value;
+    const template = tinymce.get('itemsTypesBody').getContent();
     ItemTypeC.update(id, name, color, bookable, template, canread, canwrite);
-  });
+  }
 
   // DESTROY
   $(document).on('click', '.itemsTypesDestroy', function() {
@@ -258,4 +225,47 @@ document.addEventListener('DOMContentLoaded', () => {
   // from https://www.paulirish.com/2009/random-hex-color-code-snippets/
   const colorInput = '#' + Math.floor(Math.random()*16777215).toString(16);
   $('.randomColor').val(colorInput);
+
+  document.getElementById('container').addEventListener('click', event => {
+    const el = (event.target as HTMLElement);
+    if (el.matches('[data-action="override-timestamp"]')) {
+      document.getElementById('overrideTimestampContent').toggleAttribute('hidden');
+      const value = (document.getElementById('overrideTimestamp') as HTMLInputElement).checked;
+      const payload: Payload = {
+        method: Method.POST,
+        action: Action.Update,
+        model: Model.Team,
+        target: Target.TsOverride,
+        content: value ? '1' : '0',
+        notif: true,
+      };
+      AjaxC.send(payload).then(json => {
+        notif(json);
+      });
+    // CREATE ITEMS TYPES
+    } else if (el.matches('[data-action="itemstypes-create"]')) {
+      const title = prompt(i18next.t('template-title'));
+      if (title) {
+        // no body on template creation
+        ItemTypeC.create(title).then(json => {
+          window.location.replace(`admin.php?tab=5&templateid=${json.value}`);
+        });
+      }
+    // UPDATE ITEMS TYPES
+    } else if (el.matches('[data-action="itemstypes-update"]')) {
+      itemsTypesUpdate(parseInt(el.dataset.id, 10));
+    // DESTROY ITEMS TYPES
+    } else if (el.matches('[data-action="itemstypes-destroy"]')) {
+      ItemTypeC.destroy(parseInt(el.dataset.id, 10)).then(json => {
+        notif(json);
+        if (json.res) {
+          window.location.href = '?tab=5';
+        }
+      });
+    } else if (el.matches('[data-action="export"]')) {
+      const source = (document.getElementById('categoryExport') as HTMLSelectElement).value;
+      const format = (document.getElementById('categoryExportFormat') as HTMLSelectElement).value;
+      window.location.href = `make.php?what=${format}&category=${source}`;
+    }
+  });
 });

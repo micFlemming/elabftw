@@ -14,14 +14,14 @@
 {% embed 'view-edit.html' %}
   {% block backtoview %}
     <a href='?mode=view&id={{ Entity.id }}'>
-      <i class='fas fa-chevron-circle-left mr-1 link-like'></i>{{ 'View mode'|trans }}
+      <i class='fas fa-chevron-left mr-1'></i>{{ 'View mode'|trans }}
     </a>
   {% endblock %}
   {% block createnew %}
-    {% include('create-new.html') %}
+    {% include 'create-new.html' %}
   {% endblock %}
   {% block createmodal %}
-    {% include('show-view-edit.html') %}
+    {% include 'show-view-edit.html' %}
   {% endblock %}
 {% endembed %}
 
@@ -94,6 +94,12 @@
   </div>
 </div>
 
+<!-- show message if it was recently modified -->
+{% set lastchangeDiff = 'now'|date('U') - Entity.entityData.lastchange|date('U') %}
+{% if (lastchangeDiff < 600) and not Entity.entityData.lastchangeby is null and Entity.entityData.lastchangeby != Entity.Users.userData.userid %}
+  {{ 'Warning: this entry was modified %s seconds ago by %s.'|trans|format(lastchangeDiff, lastModifierFullname)|msg('warning', false) }}
+{% endif %}
+
 <section class='box' id='main_section' style='border-left: 6px solid #{{ Entity.entityData.color }}'>
   <div class='dropdown'>
     <a class='clickable float-right' data-toggle='dropdown' aria-haspopup='true' aria-expanded='false' title='{{ 'More options'|trans }}' aria-label='{{ 'More options'|trans }}' role='button'>
@@ -114,23 +120,21 @@
       {% endif %}
 
       <div class='dropdown-divider'></div>
-      <a class='dropdown-item hover-danger' href='#' data-action='destroy'><i class='fas fa-trash-alt fa-fw' title='{{ 'Delete'|trans }}'></i> {{ 'Delete'|trans }}</a>
+      <a class='dropdown-item hover-danger {{ not deletableXp and (Entity.type == 'experiments') ? 'disabled' }}' href='#' data-action='destroy'><i class='fas fa-trash-alt fa-fw' title='{{ 'Delete'|trans }}'></i> {{ 'Delete'|trans }}</a>
     </div>
   </div>
 
   <!-- DATE -->
-  <div class='row mb-2'>
-    <div class=''>
-      <i class='far fa-calendar-alt mr-1'></i><label for='date_input'>{{ 'Started on'|trans }}</label>
-      <!-- the input expects date in YYYY-MM-DD format, and it will be displayed according to the browser's locale -->
-      <input name='date' id='date_input' type='date' value='{{ Entity.entityData.date|kdate('-') }}' />
-    </div>
+  <div class='row mb-2 form-inline'>
+    <i class='far fa-calendar-alt mr-1 fa-fw'></i><label for='date_input'>{{ 'Started on'|trans }}</label>
+    <!-- the input expects date in YYYY-MM-DD format, and it will be displayed according to the browser's locale -->
+    <input name='date' id='date_input' type='date' value='{{ Entity.entityData.date|date('Y-m-d') }}' class='form-control px-2' />
   </div>
 
-  <div class='row'>
+  <div class='row align-items-center'>
     <!-- CATEGORIES (status for exp and itemstypes for items) -->
-    <div class='col-md-3'>
-      <i class='fas fa-clipboard-check'></i>
+    <div class='col-md-4 mb-2 form-inline'>
+      <i class='fas fa-clipboard-check fa-fw mr-1'></i>
       <label for='category_select'>
       {% if Entity.type == 'experiments' %}
         {% trans %}Status{% plural 1 %}Status{% endtrans %}
@@ -138,7 +142,7 @@
         {{ 'Category'|trans }}
       {% endif %}
       </label>
-      <select id='category_select'>
+      <select id='category_select' class='form-control'>
         {% for category in categoryArr %}
           <option value='{{ category.category_id }}'
           {{ Entity.entityData.category_id == category.category_id ? ' selected' }}>{{ category.category }}</option>
@@ -146,7 +150,7 @@
       </select>
     </div>
     <!-- STAR RATING -->
-    <div class='col-md-3' style='margin-top:15px'>
+    <div class='col-md-3 mb-2'>
       <fieldset>
         <legend class='sr-only'>{{ 'Rating'|trans }}</legend>
         {% for i in range(1, 5) %}
@@ -154,39 +158,39 @@
         {% endfor %}
       </fieldset>
     </div>
-
   </div>
 
   <!-- TITLE -->
   <label for='title_input'>{{ 'Title'|trans }}</label>
-  <input id='title_input' type='text' name='title' value='{{ Entity.entityData.title|raw }}' required />
-
+  <input id='title_input' class='form-control' type='text' name='title' value='{{ Entity.entityData.title|raw }}' required />
 
   <!-- TAGS -->
-  <i class='fas fa-tags mr-1'></i><label for='createTagInput'>{{ 'Tags'|trans }}</label>
-  <div class='tags'>
-    <span id='tags_div_{{ Entity.id }}'>
-      <!--  build the tag array -->
-      {% if Entity.entityData.tags|length > 0 %}
-        {% set tagsIdArr = Entity.entityData.tags_id|split(',') %}
-        {% set tagsValueArr = Entity.entityData.tags|split('|') %}
-        {% for tag in tagsValueArr %}
-          <span class='tag m-1 clickable'>
-            <a class='tag-delete tagUnreference' data-tagid='{{ tagsIdArr[loop.index0] }}' data-id='{{ Entity.id }}'>
-              {{ tag|raw }}
-            </a>
-          </span>
-        {% endfor %}
-      {% endif %}
-    </span>
-    <input type='text' id='createTagInput' class='createTagInput mb-2' placeholder='{{ 'Add a tag'|trans }}' />
+  <div class='row mb-2'>
+    <div class='col'>
+      <i class='fas fa-tags fa-fw mr-1'></i><label for='createTagInput'>{{ 'Tags'|trans }}</label>
+      <div class='tags form-inline'>
+        <div id='tags_div_{{ Entity.id }}' class='mb-2 mb-sm-0'>
+          <!--  build the tag array -->
+          {% if Entity.entityData.tags|length > 0 %}
+            {% set tagsIdArr = Entity.entityData.tags_id|split(',') %}
+            {% set tagsValueArr = Entity.entityData.tags|split('|') %}
+            {% for tag in tagsValueArr -%}
+              <a class='tag mr-1 clickable hover-danger' data-action='unreference-tag' data-tagid='{{ tagsIdArr[loop.index0] }}'>{{ tag|raw }}</a>
+            {%- endfor -%}
+          {% endif %}
+        </div>
+        <input type='text' id='createTagInput' data-autocomplete='tags' class='createTagInput form-control' placeholder='{{ 'Add a tag'|trans }}' />
+      </div>
+    </div>
   </div>
 
   <!-- BODY -->
   {% if editor == 'md' %}
   <textarea aria-label='{{ 'Main content'|trans }}' id='body_area' class='markdown-textarea' data-language='{{ lang }}' name='body'>{{ Entity.entityData.body }}</textarea>
   {% else %}
+  <div><!-- << this div is added around the textarea to fix an issue on mobile editor. See #3107 -->
     <textarea aria-label='{{ 'Main content'|trans }}' id='body_area' class='mceditable invisible' name='body' rows='15' cols='80'>{{ Entity.entityData.body }}</textarea>
+  </div>
   {% endif %}
 
   <div class='mt-4 text-center'>
@@ -196,7 +200,7 @@
 
   <div id='metadataDiv' class='col-md-6'></div>
 
-  {% include('steps-links-edit.html') %}
+  {% include 'steps-links-edit.html' %}
 </section>
 
 <!-- UPLOAD FORM -->
@@ -205,10 +209,10 @@
   <form action='app/controllers/EntityAjaxController.php' class='dropzone' id='elabftw-dropzone'></form>
 </section>
 
-{{ include('uploads.html') }}
+{% include 'uploads.html' %}
 
 {% if Entity.Users.userData.json_editor %}
-  {{ include('json-editor.html') }}
+  {% include 'json-editor.html' %}
 {% endif %}
 
 <!-- DOODLE -->

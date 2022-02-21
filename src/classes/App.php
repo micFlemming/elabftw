@@ -16,17 +16,19 @@ use Elabftw\Exceptions\UnauthorizedException;
 use Elabftw\Models\AnonymousUser;
 use Elabftw\Models\AuthenticatedUser;
 use Elabftw\Models\Config;
+use Elabftw\Models\Notifications;
 use Elabftw\Models\Teams;
 use Elabftw\Models\Users;
 use Elabftw\Services\Check;
 use Elabftw\Traits\TwigTrait;
 use Elabftw\Traits\UploadTrait;
 use function in_array;
-use League\Flysystem\Adapter\Local;
 use League\Flysystem\Filesystem as Fs;
+use League\Flysystem\Local\LocalFilesystemAdapter;
 use Monolog\Handler\ErrorLogHandler;
 use Monolog\Logger;
 use function putenv;
+use RuntimeException;
 use function setlocale;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Session\Flash\FlashBag;
@@ -39,10 +41,9 @@ use function textdomain;
 class App
 {
     use UploadTrait;
-
     use TwigTrait;
 
-    public const INSTALLED_VERSION = '4.1.0-BETA3';
+    public const INSTALLED_VERSION = '4.2.4';
 
     public Users $Users;
 
@@ -55,6 +56,8 @@ class App
     public array $ok = array();
 
     public array $ko = array();
+
+    public array $notifsArr = array();
 
     public array $warning = array();
 
@@ -71,7 +74,7 @@ class App
         $this->Log->pushHandler(new ErrorLogHandler());
         $this->Users = new Users();
         // UPDATE SQL SCHEMA if necessary or show error message if version mismatch
-        $Update = new Update((int) $this->Config->configArr['schema'], new Sql(new Fs(new Local(dirname(__DIR__) . '/sql'))));
+        $Update = new Update((int) $this->Config->configArr['schema'], new Sql(new Fs(new LocalFilesystemAdapter(dirname(__DIR__) . '/sql'))));
         $Update->checkSchema();
     }
 
@@ -128,7 +131,13 @@ class App
      */
     public function render(string $template, array $variables): string
     {
-        return $this->getTwig($this->Config)->render($template, array_merge(array('App' => $this), $variables));
+        try {
+            return $this->getTwig($this->Config)->render($template, array_merge(array('App' => $this), $variables));
+        } catch (RuntimeException $e) {
+            echo '<h1>Error writing to twig cache directory. Check folder permissions.</h1>';
+            echo '<h2>Error message: ' . $e->getMessage() . '</h2>';
+            exit;
+        }
     }
 
     /**
@@ -155,6 +164,9 @@ class App
         $teamConfigArr = $Teams->read(new ContentParams());
         $this->linkName = $teamConfigArr['link_name'];
         $this->linkHref = $teamConfigArr['link_href'];
+        // Notifs
+        $Notifications = new Notifications($this->Users);
+        $this->notifsArr = $Notifications->read(new ContentParams());
     }
 
     /**
@@ -167,6 +179,7 @@ class App
         putenv("LC_ALL=$locale");
         setlocale(LC_ALL, $locale);
         bindtextdomain($domain, dirname(__DIR__, 2) . '/src/langs');
+        bind_textdomain_codeset($domain, 'UTF-8');
         textdomain($domain);
     }
 }
