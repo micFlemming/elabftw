@@ -10,6 +10,7 @@
 namespace Elabftw\Controllers;
 
 use function count;
+use function in_array;
 use Elabftw\Elabftw\App;
 use Elabftw\Exceptions\IllegalActionException;
 use Elabftw\Exceptions\ImproperActionException;
@@ -25,6 +26,7 @@ use Elabftw\Services\MakeJson;
 use Elabftw\Services\MakeMultiPdf;
 use Elabftw\Services\MakePdf;
 use Elabftw\Services\MakeQrPdf;
+use Elabftw\Services\MakeRdf;
 use Elabftw\Services\MakeReport;
 use Elabftw\Services\MakeStreamZip;
 use Elabftw\Services\MpdfProvider;
@@ -88,6 +90,9 @@ class MakeController implements ControllerInterface
 
             case 'zip':
                 return $this->makeZip();
+                
+            case 'rdf':
+                return $this->makeRdf();
 
             default:
                 throw new IllegalActionException('Bad make what value');
@@ -146,6 +151,26 @@ class MakeController implements ControllerInterface
             $Make->getZip();
         });
         return $Response;
+    }
+    
+    private function makeRdf(): Response
+    {
+        $format = $this->App->Request->query->get('format');
+        $allowedFormats = [
+            "turtle",
+            "jsonld"
+        ];
+        
+        if (!($this->Entity instanceof Items)) {
+            throw new ImproperActionException(sprintf('Entity of type %s is not allowed in this context', $this->Entity::class));
+        } elseif (!in_array($format, $allowedFormats)) {
+            throw new ImproperActionException(sprintf('Format "%s" is not allowed in this context', $format));
+        }
+        
+        $this->Entity->setId((int) $this->App->Request->query->get('id'));
+        $this->Entity->canOrExplode('read');
+        
+        return $this->getFileResponse(new MakeRdf($this->Entity, $format));
     }
 
     private function getMpdfProvider(): MpdfProviderInterface
