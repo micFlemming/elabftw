@@ -20,6 +20,7 @@ use Elabftw\Interfaces\MpdfProviderInterface;
 use Elabftw\Models\AbstractEntity;
 use Elabftw\Models\Experiments;
 use Elabftw\Models\Items;
+use Elabftw\Models\Scheduler;
 use Elabftw\Models\Teams;
 use Elabftw\Services\MakeCsv;
 use Elabftw\Services\MakeJson;
@@ -28,6 +29,7 @@ use Elabftw\Services\MakePdf;
 use Elabftw\Services\MakeQrPdf;
 use Elabftw\Services\MakeRdf;
 use Elabftw\Services\MakeReport;
+use Elabftw\Services\MakeSchedulerReport;
 use Elabftw\Services\MakeStreamZip;
 use Elabftw\Services\MpdfProvider;
 use Symfony\Component\HttpFoundation\Response;
@@ -56,6 +58,18 @@ class MakeController implements ControllerInterface
         // generate the id array
         if ($this->App->Request->query->has('category')) {
             $this->idArr = $this->Entity->getIdFromCategory((int) $this->App->Request->query->get('category'));
+        } elseif ($this->App->Request->query->has('user')) {
+            // only admin can export a user
+            if (!$this->App->Users->userData['is_admin']) {
+                throw new IllegalActionException('User tried to export another user but is not admin.');
+            }
+            // being admin is good, but we also need to be in the same team as the requested user
+            $Teams = new Teams($this->App->Users);
+            $targetUserid = (int) $this->App->Request->query->get('user');
+            if (!$Teams->hasCommonTeamWithCurrent($targetUserid, $this->App->Users->userData['team'])) {
+                throw new IllegalActionException('User tried to export another user but is not in same team.');
+            }
+            $this->idArr = $this->Entity->getIdFromUser($targetUserid);
         } elseif ($this->App->Request->query->has('id')) {
             $this->idArr = explode(' ', (string) $this->App->Request->query->get('id'));
         }
@@ -87,6 +101,12 @@ class MakeController implements ControllerInterface
                     throw new IllegalActionException('Non sysadmin user tried to generate report.');
                 }
                 return $this->makeReport();
+
+            case 'schedulerReport':
+                if (!$this->App->Session->get('is_admin')) {
+                    throw new IllegalActionException('Non admin user tried to generate scheduler report.');
+                }
+                return $this->makeSchedulerReport();
 
             case 'zip':
                 return $this->makeZip();
@@ -129,6 +149,15 @@ class MakeController implements ControllerInterface
     private function makeReport(): Response
     {
         return $this->getFileResponse(new MakeReport(new Teams($this->App->Users)));
+    }
+
+    private function makeSchedulerReport(): Response
+    {
+        return $this->getFileResponse(new MakeSchedulerReport(
+            new Scheduler(new Items($this->App->Users)),
+            (string) $this->App->Request->query->get('from'),
+            (string) $this->App->Request->query->get('to'),
+        ));
     }
 
     private function makeZip(): Response

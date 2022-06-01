@@ -5,11 +5,13 @@
  * @license AGPL-3.0
  * @package elabftw
  */
-import { notif } from './misc';
+import { notif, reloadElement } from './misc';
+import { Action, Method, Payload, Model } from './interfaces';
 import i18next from 'i18next';
 import tinymce from 'tinymce/tinymce';
 import { getTinymceBaseConfig } from './tinymce';
 import Tab from './Tab.class';
+import { Ajax } from './Ajax.class';
 
 document.addEventListener('DOMContentLoaded', () => {
   if (window.location.pathname !== '/sysconfig.php') {
@@ -17,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const TabMenu = new Tab();
+  const AjaxC = new Ajax();
   TabMenu.init(document.querySelector('.tabbed-menu'));
 
   // GET the latest version information
@@ -74,17 +77,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }).catch(error => latestVersionDiv.append(error));
 
+
   // TEAMS
   const Teams = {
     controller: 'app/controllers/SysconfigAjaxController.php',
-    editUserToTeam(userid, action): void {
-      $('#editUserToTeamUserid').attr('value', userid);
-      $('#editUserToTeamAction').attr('value', action);
-      const params = new URLSearchParams(document.location.search);
-      $('#editUserToTeamQuery').attr('value', params.get('q'));
+    editUser2Team(action: Action, teamid: number, userid: number): void {
+      const payload: Payload = {
+        method: Method.POST,
+        action: action,
+        model: Model.User2Team,
+        notif: true,
+        extraParams: {
+          teamid: teamid,
+          userid: userid,
+        },
+      };
+      AjaxC.send(payload)
+        .then(json => {
+          notif(json);
+          reloadElement('editUsersBox');
+        });
     },
     create: function(): void {
-      const name = $('#teamsName').val();
+      const name = (document.getElementById('teamsName') as HTMLInputElement).value;
       $.post(this.controller, {
         teamsCreate: true,
         teamsName: name,
@@ -118,7 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
     destructor: function(json): void {
       notif(json);
       if (json.res) {
-        $('#teamsDiv').load('sysconfig.php #teamsDiv > *');
+        reloadElement('teamsDiv');
       }
     },
   };
@@ -135,51 +150,70 @@ document.addEventListener('DOMContentLoaded', () => {
   $(document).on('click', '.teamsArchiveButton', function() {
     notif({'msg': 'Feature not yet implemented :)', 'res': true});
   });
-  $(document).on('click', '.editUserToTeam', function() {
-    Teams.editUserToTeam($(this).data('userid'), $(this).data('useraction'));
-  });
-
-  // MAIL METHOD in a function because is also called in document ready
-  function toggleMailMethod(method): void {
-    switch (method) {
-    case 'sendmail':
-      $('#smtp_config').hide();
-      $('#sendmail_config').show();
-      break;
-    case 'smtp':
-      $('#smtp_config').show();
-      $('#sendmail_config').hide();
-      break;
-    default:
-      $('#smtp_config').hide();
-      $('#sendmail_config').hide();
-      $('#general_mail_config').hide();
-    }
-  }
-  $(document).on('change', '#selectMailMethod', function() {
-    toggleMailMethod($(this).val());
-  });
 
   // Add click listener and do action based on which element is clicked
   document.querySelector('.real-container').addEventListener('click', (event) => {
     const el = (event.target as HTMLElement);
     // CLEAR-LOCKEDUSERS and CLEAR-LOCKOUTDEVICES
     if (el.matches('[data-action="clear-nologinusers"]') || el.matches('[data-action="clear-lockoutdevices"]')) {
-      const formData  = new FormData();
-      formData.append(el.dataset.action, 'yep');
-      formData.append('csrf', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
-      fetch('app/controllers/SysconfigAjaxController.php', {
-        method: 'POST',
-        body: formData,
-      }).then(response => response.json())
-        .then(json => {
+      AjaxC.postForm('app/controllers/SysconfigAjaxController.php', { [el.dataset.action]: '1' })
+        .then(res => res.json().then(json => {
           if (json.res) {
-            $('#bruteforceDiv').load('sysconfig.php #bruteforceDiv > *');
+            reloadElement('bruteforceDiv');
           }
           notif(json);
-        });
+        }));
+
+    // ADD USER TO TEAM
+    } else if (el.matches('[data-action="create-user2team"]')) {
+      const selectEl = (el.previousElementSibling as HTMLSelectElement);
+      Teams.editUser2Team(
+        Action.Create,
+        parseInt(selectEl.options[selectEl.selectedIndex].value, 10),
+        parseInt(el.dataset.userid, 10),
+      );
+    // REMOVE USER FROM TEAM
+    } else if (el.matches('[data-action="destroy-user2team"]')) {
+      if (!confirm(i18next.t('generic-delete-warning'))) {
+        return;
+      }
+      Teams.editUser2Team(
+        Action.Destroy,
+        parseInt(el.dataset.teamid, 10),
+        parseInt(el.dataset.userid, 10),
+      );
     }
   });
+
+  /**
+   * Timestamp provider select
+   */
+  const noAccountTsa = ['dfn', 'digicert', 'sectigo', 'globalsign'];
+  if (document.getElementById('ts_authority')) {
+    const select = (document.getElementById('ts_authority') as HTMLSelectElement);
+    // trigger the function when the value is changed
+    select.addEventListener('change', () => {
+      updateTsFieldsVisibility(select);
+    });
+    // and also on page load
+    updateTsFieldsVisibility(select);
+  }
+
+  function updateTsFieldsVisibility(select: HTMLSelectElement) {
+    if (noAccountTsa.includes(select.value)) {
+      // mask all
+      document.getElementById('ts_loginpass').toggleAttribute('hidden', true);
+      document.getElementById('ts_urldiv').toggleAttribute('hidden', true);
+    } else if (select.value === 'universign') {
+      // only make loginpass visible
+      document.getElementById('ts_loginpass').removeAttribute('hidden');
+      document.getElementById('ts_urldiv').toggleAttribute('hidden', true);
+    } else if (select.value === 'custom') {
+      // show all
+      document.getElementById('ts_loginpass').removeAttribute('hidden');
+      document.getElementById('ts_urldiv').removeAttribute('hidden');
+    }
+  }
 
   // MASS MAIL
   $(document).on('click', '#massSend', function() {
@@ -227,8 +261,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const input = inputList[i];
     input.disabled = false;
   }
-  // honor already saved mail_method setting and hide unused options accordingly
-  toggleMailMethod($('#selectMailMethod').val());
 
   $(document).on('click', '.idpsDestroy', function() {
     const elem = $(this);

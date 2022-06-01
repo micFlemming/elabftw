@@ -37,11 +37,14 @@ class QueryBuilderVisitor implements Visitor
     public function visitSimpleValueWrapper(SimpleValueWrapper $simpleValueWrapper, VisitorParameters $parameters): WhereCollector
     {
         $param = $this->getUniqueID();
-        $query = '(entity.body' . ' LIKE ' . $param . ' OR ' . 'entity.title' . ' LIKE ' . $param . ')';
 
         return new WhereCollector(
-            $query,
-            array(array('param' => $param, 'value' => '%' . $simpleValueWrapper->getValue() . '%', 'type' => PDO::PARAM_STR)),
+            '(entity.body LIKE ' . $param . ' OR entity.title LIKE ' . $param . ')',
+            array(array(
+                'param' => $param,
+                'value' => '%' . $simpleValueWrapper->getValue() . '%',
+                'type' => PDO::PARAM_STR,
+            )),
         );
     }
 
@@ -56,13 +59,25 @@ class QueryBuilderVisitor implements Visitor
         if ($dateType === 'simple') {
             $param = $this->getUniqueID();
             $query = $column . $dateField->getOperator() . $param;
-            $bindValues[] = array('param' => $param, 'value' => $dateField->getValue(), 'type' => PDO::PARAM_INT);
+            $bindValues[] = array(
+                'param' => $param,
+                'value' => $dateField->getValue(),
+                'type' => PDO::PARAM_INT,
+            );
         } elseif ($dateType === 'range') {
             $paramMin = $this->getUniqueID();
             $paramMax = $this->getUniqueID();
             $query = $column . ' BETWEEN ' . $paramMin . ' AND ' . $paramMax;
-            $bindValues[] = array('param' => $paramMin, 'value' => $dateField->getValue(), 'type' => PDO::PARAM_INT);
-            $bindValues[] = array('param' => $paramMax, 'value' => $dateField->getDateTo(), 'type' => PDO::PARAM_INT);
+            $bindValues[] = array(
+                'param' => $paramMin,
+                'value' => $dateField->getValue(),
+                'type' => PDO::PARAM_INT,
+            );
+            $bindValues[] = array(
+                'param' => $paramMax,
+                'value' => $dateField->getDateTo(),
+                'type' => PDO::PARAM_INT,
+            );
         }
         return new WhereCollector($query, $bindValues);
     }
@@ -87,7 +102,7 @@ class QueryBuilderVisitor implements Visitor
         // Call class methods dynamically to avoid many if statements.
         // This works here because the parser defines the list of fields.
         $method = 'visitField' . ucfirst($field->getFieldType());
-        return $this->$method($field->getValue(), $parameters);
+        return $this->$method($field->getValue(), $field->getAffix(), $parameters);
     }
 
     public function visitNotExpression(NotExpression $notExpression, VisitorParameters $parameters): WhereCollector
@@ -186,52 +201,92 @@ class QueryBuilderVisitor implements Visitor
         );
     }
 
-    private function visitFieldAttachment(string $searchTerm, VisitorParameters $parameters): WhereCollector
+    private function visitFieldAttachment(string $searchTerm, string $affix, VisitorParameters $parameters): WhereCollector
     {
-        return $this->getWhereCollector(
-            'IFNULL(uploads.has_attachment, 0) = ',
-            $searchTerm,
-            PDO::PARAM_INT,
+        // Are we checking if there is any attachment at all
+        if ($searchTerm === '0' || $searchTerm === '1') {
+            return $this->getWhereCollector(
+                'IFNULL(uploads.has_attachment, 0) = ',
+                $searchTerm,
+                PDO::PARAM_INT,
+            );
+        }
+
+        // Or are we searching in comments or real_names
+        $param = $this->getUniqueID();
+
+        return new WhereCollector(
+            '(uploads.comments LIKE ' . $param . ' OR uploads.real_names LIKE ' . $param . ')',
+            array(array(
+                'param' => $param,
+                'value' => $affix . $searchTerm . $affix,
+                'type' => PDO::PARAM_STR,
+                'searchAttachments' => true,
+            )),
         );
     }
 
-    private function visitFieldAuthor(string $searchTerm, VisitorParameters $parameters): WhereCollector
+    private function visitFieldAuthor(string $searchTerm, string $affix, VisitorParameters $parameters): WhereCollector
     {
         return $this->getWhereCollector(
             "CONCAT(users.firstname, ' ', users.lastname) LIKE ",
-            '%' . $searchTerm . '%',
+            $affix . $searchTerm . $affix,
             PDO::PARAM_STR,
         );
     }
 
-    private function visitFieldBody(string $searchTerm, VisitorParameters $parameters): WhereCollector
+    private function visitFieldBody(string $searchTerm, string $affix, VisitorParameters $parameters): WhereCollector
     {
         return $this->getWhereCollector(
             'entity.body LIKE ',
-            '%' . $searchTerm . '%',
+            $affix . $searchTerm . $affix,
             PDO::PARAM_STR,
         );
     }
 
-    private function visitFieldCategory(string $searchTerm, VisitorParameters $parameters): WhereCollector
+    private function visitFieldCategory(string $searchTerm, string $affix, VisitorParameters $parameters): WhereCollector
     {
         return $this->getWhereCollector(
             'categoryt.name LIKE ',
-            '%' . $searchTerm . '%',
+            $affix . $searchTerm . $affix,
             PDO::PARAM_STR,
         );
     }
 
-    private function visitFieldElabid(string $searchTerm, VisitorParameters $parameters): WhereCollector
+    private function visitFieldElabid(string $searchTerm, string $affix, VisitorParameters $parameters): WhereCollector
     {
         return $this->getWhereCollector(
             'entity.elabid LIKE ',
-            '%' . $searchTerm . '%',
+            $affix . $searchTerm . $affix,
             PDO::PARAM_STR,
         );
     }
 
-    private function visitFieldLocked(string $searchTerm, VisitorParameters $parameters): WhereCollector
+    private function visitFieldGroup(string $searchTerm, string $affix, VisitorParameters $parameters): WhereCollector
+    {
+        $teamGroups = $parameters->getTeamGroups();
+        $users = array();
+        foreach ($teamGroups as $teamGroup) {
+            if ($searchTerm === $teamGroup['name']) {
+                array_push($users, ...array_column($teamGroup['users'], 'userid'));
+            }
+        }
+        $queryParts = array('0');
+        $bindValues = array();
+        foreach (array_unique($users) as $user) {
+            $param = $this->getUniqueID();
+            $queryParts[] = 'users.userid = ' . $param;
+            $bindValues[] = array(
+                'param' => $param,
+                'value' => $user,
+                'type' => PDO::PARAM_INT,
+            );
+        }
+
+        return new WhereCollector('(' . implode(' OR ', $queryParts) . ')', $bindValues);
+    }
+
+    private function visitFieldLocked(string $searchTerm, string $affix, VisitorParameters $parameters): WhereCollector
     {
         return $this->getWhereCollector(
             'entity.locked = ',
@@ -240,7 +295,7 @@ class QueryBuilderVisitor implements Visitor
         );
     }
 
-    private function visitFieldRating(string $searchTerm, VisitorParameters $parameters): WhereCollector
+    private function visitFieldRating(string $searchTerm, string $affix, VisitorParameters $parameters): WhereCollector
     {
         return $this->getWhereCollector(
             'entity.rating = ',
@@ -249,16 +304,16 @@ class QueryBuilderVisitor implements Visitor
         );
     }
 
-    private function visitFieldStatus(string $searchTerm, VisitorParameters $parameters): WhereCollector
+    private function visitFieldStatus(string $searchTerm, string $affix, VisitorParameters $parameters): WhereCollector
     {
         return $this->getWhereCollector(
             'categoryt.name LIKE ',
-            '%' . $searchTerm . '%',
+            $affix . $searchTerm . $affix,
             PDO::PARAM_STR,
         );
     }
 
-    private function visitFieldTimestamped(string $searchTerm, VisitorParameters $parameters): WhereCollector
+    private function visitFieldTimestamped(string $searchTerm, string $affix, VisitorParameters $parameters): WhereCollector
     {
         return $this->getWhereCollector(
             'entity.timestamped = ',
@@ -267,16 +322,16 @@ class QueryBuilderVisitor implements Visitor
         );
     }
 
-    private function visitFieldTitle(string $searchTerm, VisitorParameters $parameters): WhereCollector
+    private function visitFieldTitle(string $searchTerm, string $affix, VisitorParameters $parameters): WhereCollector
     {
         return $this->getWhereCollector(
             'entity.title LIKE ',
-            '%' . $searchTerm . '%',
+            $affix . $searchTerm . $affix,
             PDO::PARAM_STR,
         );
     }
 
-    private function visitFieldVisibility(string $searchTerm, VisitorParameters $parameters): WhereCollector
+    private function visitFieldVisibility(string $searchTerm, string $affix, VisitorParameters $parameters): WhereCollector
     {
         $filteredSearchArr = (new VisibilityFieldHelper($searchTerm, $parameters->getVisArr()))->getArr();
 
@@ -292,6 +347,6 @@ class QueryBuilderVisitor implements Visitor
             );
         }
 
-        return new WhereCollector(implode(' OR ', $queryParts), $bindValues);
+        return new WhereCollector('(' . implode(' OR ', $queryParts) . ')', $bindValues);
     }
 }

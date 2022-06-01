@@ -20,10 +20,10 @@ use Elabftw\Services\LoginHelper;
 use Exception;
 use function header;
 use function in_array;
-use function is_readable;
 use Monolog\Logger;
 use PDOException;
 use function setcookie;
+use const SITE_URL;
 use function stripos;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Session\Session;
@@ -46,14 +46,8 @@ $Session->start();
 $Request->setSession($Session);
 
 try {
-    // CONFIG.PHP
-    // Make sure config.php is readable and load it
-    $configFilePath = dirname(__DIR__, 2) . '/config.php';
-    if (!is_readable($configFilePath)) {
-        throw new ImproperActionException('The config file is missing! Did you run the installer?');
-    }
-    require_once $configFilePath;
-    // END CONFIG.PHP
+    // Load config.php created by prepare.sh during container initialization
+    require_once dirname(__DIR__, 2) . '/config.php';
 
     // Config::getConfig() will make the first SQL request
     // PDO will throw an exception if the SQL structure is not imported yet
@@ -61,6 +55,10 @@ try {
         $Config = Config::getConfig();
     } catch (DatabaseErrorException | PDOException $e) {
         throw new ImproperActionException('The database structure is not loaded! Did you run the installer?');
+    }
+    // @phpstan-ignore-next-line
+    if (SITE_URL === '') {
+        throw new ImproperActionException('<h1>Could not find mandatory <code>SITE_URL</code> variable! Please <a href="https://doc.elabftw.net/changelog.html#version-4-3-0">have a look at the changelog</a>.</h1>');
     }
 
     // CSRF
@@ -145,15 +143,7 @@ try {
     header('X-Elab-Need-Auth: 1');
     // don't send a GET app/logout.php if it's an ajax call because it messes up the jquery ajax
     if ($Request->headers->get('X-Requested-With') !== 'XMLHttpRequest') {
-        // Note: we assume https here, this will cause an issue if you try to access it in http, but anyway this should never be done so I guess it's okay.
-        // don't use the Config from App here as it might not exist yet
-        $Config = Config::getConfig();
-        if ($Config->configArr['url']) {
-            $url = $Config->configArr['url'];
-        } else {
-            $url = 'https://' . $Request->getHost() . ':' . $Request->getPort();
-        }
-        $url .= '/app/logout.php?keep_redirect=1';
+        $url = SITE_URL . '/app/logout.php?keep_redirect=1';
         header('Location: ' . $url);
     }
     exit;

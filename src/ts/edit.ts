@@ -6,9 +6,9 @@
  * @package elabftw
  */
 declare let key: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-import { notif } from './misc';
+import { notif, reloadElement } from './misc';
 import { getTinymceBaseConfig, quickSave } from './tinymce';
-import { EntityType, Target, Upload, Payload, Method, Action } from './interfaces';
+import { EntityType, Target, Upload, Payload, Method, Action, PartialEntity } from './interfaces';
 import './doodle';
 import tinymce from 'tinymce/tinymce';
 import { getEditor } from './Editor.class';
@@ -39,6 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const entity = getEntity();
   const EntityC = new EntityClass(entity.type);
+  const AjaxC = new Ajax();
 
   // add extra fields elements from metadata json
   const MetadataC = new Metadata(entity);
@@ -74,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
         notif(json);
         // reload the #filesdiv once the file is uploaded
         if (this.getUploadingFiles().length === 0 && this.getQueuedFiles().length === 0) {
-          $('#filesdiv').load(`?mode=edit&id=${String(entity.id)} #filesdiv > *`, function() {
+          reloadElement('filesdiv').then(() => {
             const dropZone = Dropzone.forElement(dropZoneElement);
             // Check to make sure the success function is set by tinymce and we are dealing with an image drop and not a regular upload
             if (typeof dropZone.tinyImageSuccess !== 'undefined' && dropZone.tinyImageSuccess !== null) {
@@ -186,17 +187,44 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (el.matches('[data-action="switch-editor"]')) {
       editor.switch();
 
+    // ANNOTATE IMAGE
+    } else if (el.matches('[data-action="annotate-image"]')) {
+      // show doodle canvas
+      const doodleDiv = document.getElementById('doodleDiv');
+      doodleDiv.removeAttribute('hidden');
+      doodleDiv.scrollIntoView();
+      // adjust chevron icon
+      const doodleDivIcon = document.getElementById('doodleDivIcon');
+      doodleDivIcon.classList.remove('fa-chevron-circle-right');
+      doodleDivIcon.classList.add('fa-chevron-circle-down');
+
+      const context: CanvasRenderingContext2D = (document.getElementById('doodleCanvas') as HTMLCanvasElement).getContext('2d');
+      const img = new Image();
+      // set src attribute to image path
+      img.addEventListener('load', function() {
+        // make canvas bigger than image
+        context.canvas.width = (this as HTMLImageElement).width * 2;
+        context.canvas.height = (this as HTMLImageElement).height * 2;
+        // add image to canvas
+        context.drawImage(img, (this as HTMLImageElement).width / 2, (this as HTMLImageElement).height / 2);
+      });
+      img.src = `app/download.php?storage=${el.dataset.storage}&f=${el.dataset.path}`;
+
     // IMPORT BODY OF LINKED ITEM INTO EDITOR
-    } else if (el.matches('[data-action="import-link"]')) {
-      // this is here because here tinymce exists and is reachable
-      // before this code was in steps-links.ts but it was not working
-      const id = el.dataset.target;
-      $.get('app/controllers/EntityAjaxController.php', {
-        getBody : true,
-        id : id,
-        type : 'items',
-        editor: editor.type,
-      }).done(json => editor.setContent(json.msg));
+    } else if (el.matches('[data-action="import-link-body"]')) {
+      // this is in this file and not in steps-links-edit because here `editor`
+      // exists and is reachable
+      const payload: Payload = {
+        method: Method.GET,
+        action: Action.Read,
+        model: EntityType.Item,
+        entity: {
+          type: EntityType.Item,
+          id: parseInt(el.dataset.target, 10),
+        },
+        target: Target.Body,
+      };
+      AjaxC.send(payload).then(json => editor.setContent((json.value as PartialEntity).body));
 
     // DESTROY ENTITY
     } else if (el.matches('[data-action="destroy"]')) {
@@ -272,27 +300,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   titleInput.addEventListener('blur', () => {
-    const content = titleInput.value;
-    EntityC.update(entity.id, Target.Title, content);
-    // update the page's title
-    document.title = content + ' - eLabFTW';
-  });
-
-  // ANNOTATE IMAGE
-  $(document).on('click', '.annotateImg',  function() {
-    $('#doodleDiv').show();
-    $(document).scrollTop($('#doodle-anchor').offset().top);
-    const context: CanvasRenderingContext2D = (document.getElementById('doodleCanvas') as HTMLCanvasElement).getContext('2d');
-    const img = new Image();
-    // set src attribute to image path
-    img.addEventListener('load', function() {
-      // make canvas bigger than image
-      context.canvas.width = (this as HTMLImageElement).width * 2;
-      context.canvas.height = (this as HTMLImageElement).height * 2;
-      // add image to canvas
-      context.drawImage(img, (this as HTMLImageElement).width / 2, (this as HTMLImageElement).height / 2);
-    });
-    img.src = 'app/download.php?f=' + $(this).data('path');
+    if (titleInput.value !== titleInput.defaultValue) {
+      const content = titleInput.value;
+      titleInput.defaultValue = content;
+      EntityC.update(entity.id, Target.Title, content);
+      // update the page's title
+      document.title = content + ' - eLabFTW';
+    }
   });
 
   // STAR RATING
@@ -310,11 +324,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const tinymceEditImage = {
       selected: false,
       uploadId: 0,
-      url: '',
       reset: function(): void {
         this.selected = false;
         this.uploadId = 0;
-        this.url = '';
       },
     };
 
@@ -325,34 +337,45 @@ document.addEventListener('DOMContentLoaded', () => {
         const dropZone = Dropzone.forElement('#elabftw-dropzone');
         // Edgecase for editing an image using tinymce ImageTools
         // Check if it was selected. This is set by an event hook below
-        if (tinymceEditImage.selected == true && confirm(i18next.t('replace-edited-file'))) {
-          // Replace the file on the server
-          const formData = new FormData();
-          formData.append('action', 'update');
-          formData.append('target', 'file');
-          formData.append('replace', 'true');
-          formData.append('id', String(tinymceEditImage.uploadId));
-          formData.append('entity_id', String(entity.id));
-          formData.append('entity_type', entity.type);
-          formData.append('model', 'upload');
-          formData.append('csrf', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
-          formData.append('content', blobInfo.blob());
-
-          $.post({
-            url: 'app/controllers/RequestHandler.php',
-            data: formData,
-            processData: false,
-            contentType: false,
-          }).done(function() {
-            // Send the same url we stored before the edit menu was clicked to tinymce
-            success(tinymceEditImage.url);
-            tinymceEditImage.reset();
-          });
+        if (tinymceEditImage.selected === true) {
+          const uploadId = String(tinymceEditImage.uploadId);
+          // Note: the confirm will unselect tinymceEditImage and we lose information
+          // so it is done after we grab uploadId
+          if (confirm(i18next.t('replace-edited-file'))) {
+            // Replace the file on the server
+            AjaxC.postForm('app/controllers/RequestHandler.php', {
+              action: 'update',
+              target: 'file',
+              replace: '1',
+              id: uploadId,
+              entity_id: String(entity.id),
+              entity_type: entity.type,
+              model: 'upload',
+              content: blobInfo.blob(),
+            }).then(() => {
+              reloadElement('filesdiv').then(() => {
+                // now fetch the new url of the upload so we can replace our image with that.
+                // Problem is: we don't have the id of the new upload
+                // so get all the link to attached files and we will take the highest one (most recent upload id)
+                const ids = [];
+                document.querySelectorAll('[id^="upload-filename"]').forEach(l => {
+                  ids.push(parseInt(l.getAttribute('id').split('_').pop(), 10));
+                });
+                const mostRecent = ids.sort((a, b) => a - b).pop();
+                const imgHref = (document.getElementById(`upload-filename_${mostRecent}`) as HTMLLinkElement).href;
+                const q = new URL(imgHref).searchParams;
+                // call the success callback function with the new URL
+                success(`app/download.php?f=${q.get('f')}&storage=${q.get('storage')}`);
+                tinymceEditImage.reset();
+              });
+            });
+          }
         // If the blob has no filename, ask for one. (Firefox edgecase: Embedded image in Data URL)
         } else if (typeof blobInfo.blob().name === 'undefined') {
           const filename = prompt('Enter filename with extension e.g. .jpeg');
           if (typeof filename !== 'undefined' && filename !== null) {
-            const fileOfBlob = new File([blobInfo.blob()], filename);
+            // use window.File here not dropzone.File
+            const fileOfBlob = new window.File([blobInfo.blob()], filename);
             dropZone.addFile(fileOfBlob);
             dropZone.tinyImageSuccess = success;
           } else {
@@ -377,7 +400,7 @@ document.addEventListener('DOMContentLoaded', () => {
           },
           target: Target.List,
         };
-        (new Ajax()).send(payload).then(json => callback(json.value));
+        AjaxC.send(payload).then(json => callback(json.value));
       },
       // use a custom function for the save button in toolbar
       save_onsavecallback: (): void => quickSave(),
@@ -394,16 +417,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // the uploadid is added as a data-uploadid attribute when inserted in the text
         // this allows us to know which corresponding upload is selected so we can replace it if needed (after a crop for instance)
         const uploadId = parseInt(selectedImage.dataset.uploadid);
-        let url = selectedImage.src;
-        url = url.slice(url.lastIndexOf('app/'));
-        // Sometimes tinymce adds an identifier on modification
-        // This checks for and removes it
-        if (url.lastIndexOf('&') != -1){
-          url = url.slice(0, url.lastIndexOf('&'));
-        }
         tinymceEditImage.selected = true;
         tinymceEditImage.uploadId = uploadId;
-        tinymceEditImage.url = url;
       } else {
         tinymceEditImage.reset();
       }
@@ -414,7 +429,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // INSERT IMAGE AT CURSOR POSITION IN TEXT
   $(document).on('click', '.inserter',  function() {
     // link to the image
-    const url = 'app/download.php?f=' + $(this).data('link');
+    const url = `app/download.php?f=${$(this).data('link')}&storage=${$(this).data('storage')}`;
     // switch for markdown or tinymce editor
     let content;
     if (editor.type === 'md') {

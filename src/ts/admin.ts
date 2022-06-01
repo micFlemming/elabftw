@@ -5,7 +5,7 @@
  * @license AGPL-3.0
  * @package elabftw
  */
-import { notif } from './misc';
+import { notif, reloadElement } from './misc';
 import $ from 'jquery';
 import 'jquery-ui/ui/widgets/autocomplete';
 import { Malle } from '@deltablot/malle';
@@ -80,17 +80,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const content = $('#teamGroupCreate').val() as string;
     TeamGroupC.create(content).then(json => {
       if (json.res) {
-        // only reload children
-        $('#team_groups_div').load('admin.php #team_groups_div > *');
-        $('#teamGroupCreate').val('');
+        reloadElement('team_groups_div');
+        (document.getElementById('teamGroupCreate') as HTMLInputElement).value = '';
       }
     });
   });
   $('#team_groups_div').on('click', '.teamGroupDelete', function() {
     if (confirm(i18next.t('generic-delete-warning'))) {
       TeamGroupC.destroy($(this).data('id')).then(() => {
-        // only reload children
-        $('#team_groups_div').load('admin.php #team_groups_div > *');
+        reloadElement('team_groups_div');
       });
     }
   });
@@ -100,18 +98,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.which === 13 || e.type === 'focusout') {
       const user = parseInt($(this).val() as string, 10);
       const group = $(this).data('group');
-      TeamGroupC.update(user, group, 'add').then(() => {
-        // only reload children
-        $('#team_groups_div').load('admin.php #team_groups_div > *');
-      });
+      if (e.target.value !== e.target.defaultValue) {
+        TeamGroupC.update(user, group, 'add').then(() => {
+          reloadElement('team_groups_div');
+        });
+      }
     }
   });
   $('#team_groups_div').on('click', '.rmUserFromGroup', function() {
     const user = $(this).data('user');
     const group = $(this).data('group');
     TeamGroupC.update(user, group, 'rm').then(() => {
-      // only reload children
-      $('#team_groups_div').load('admin.php #team_groups_div > *');
+      reloadElement('team_groups_div');
     });
   });
 
@@ -150,9 +148,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelector('[data-action="create-status"]').addEventListener('click', () => {
     const content = (document.getElementById('statusName') as HTMLInputElement).value;
     const color = (document.getElementById('statusColor') as HTMLInputElement).value;
-    const isTimestampable = (document.getElementById('statusTimestamp') as HTMLInputElement).checked;
     if (content.length > 1) {
-      StatusC.create(content, color, isTimestampable).then(() => window.location.replace('admin.php?tab=4'));
+      StatusC.create(content, color).then(() => window.location.replace('admin.php?tab=4'));
     }
   });
 
@@ -161,9 +158,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const statusId = parseInt((ev.target as HTMLElement).dataset.statusid);
       const content = (document.getElementById('statusName_' + statusId) as HTMLInputElement).value;
       const color = (document.getElementById('statusColor_' + statusId) as HTMLInputElement).value;
-      const isTimestampable = (document.getElementById('statusTimestamp_' + statusId) as HTMLInputElement).checked;
       const isDefault = (document.getElementById('statusDefault_' + statusId) as HTMLInputElement).checked;
-      StatusC.update(statusId, content, color, isTimestampable, isDefault);
+      StatusC.update(statusId, content, color, isDefault);
     });
   });
 
@@ -228,22 +224,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('container').addEventListener('click', event => {
     const el = (event.target as HTMLElement);
-    if (el.matches('[data-action="override-timestamp"]')) {
-      document.getElementById('overrideTimestampContent').toggleAttribute('hidden');
-      const value = (document.getElementById('overrideTimestamp') as HTMLInputElement).checked;
-      const payload: Payload = {
-        method: Method.POST,
-        action: Action.Update,
-        model: Model.Team,
-        target: Target.TsOverride,
-        content: value ? '1' : '0',
-        notif: true,
-      };
-      AjaxC.send(payload).then(json => {
-        notif(json);
-      });
     // CREATE ITEMS TYPES
-    } else if (el.matches('[data-action="itemstypes-create"]')) {
+    if (el.matches('[data-action="itemstypes-create"]')) {
       const title = prompt(i18next.t('template-title'));
       if (title) {
         // no body on template creation
@@ -262,10 +244,20 @@ document.addEventListener('DOMContentLoaded', () => {
           window.location.href = '?tab=5';
         }
       });
-    } else if (el.matches('[data-action="export"]')) {
+    } else if (el.matches('[data-action="export-category"]')) {
       const source = (document.getElementById('categoryExport') as HTMLSelectElement).value;
       const format = (document.getElementById('categoryExportFormat') as HTMLSelectElement).value;
       window.location.href = `make.php?what=${format}&category=${source}`;
+
+    } else if (el.matches('[data-action="export-user"]')) {
+      const source = (document.getElementById('userExport') as HTMLSelectElement).value;
+      const format = (document.getElementById('userExportFormat') as HTMLSelectElement).value;
+      window.location.href = `make.php?what=${format}&user=${source}&type=experiments`;
+
+    } else if (el.matches('[data-action="export-scheduler"]')) {
+      const from = (document.getElementById('schedulerDateFrom') as HTMLSelectElement).value;
+      const to = (document.getElementById('schedulerDateTo') as HTMLSelectElement).value;
+      window.location.href = `make.php?what=schedulerReport&from=${from}&to=${to}`;
     }
   });
 });

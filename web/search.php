@@ -44,7 +44,7 @@ if ($Request->query->get('type') !== 'experiments') {
 
 // TEAM GROUPS
 $TeamGroups = new TeamGroups($App->Users);
-$teamGroupsArr = $TeamGroups->read(new ContentParams());
+$teamGroupsArr = $TeamGroups->readGroupsWithUsersFromUser();
 $visibilityArr = $TeamGroups->getVisibilityList();
 
 $usersArr = $App->Users->readAllFromTeam();
@@ -64,7 +64,7 @@ $extendedError = '';
 if ($Request->query->has('extended') && !empty($Request->query->get('extended'))) {
     $extended = trim((string) $Request->query->get('extended'));
 
-    $advancedQuery = new AdvancedSearchQuery($extended, new VisitorParameters($Entity->type, $visibilityArr));
+    $advancedQuery = new AdvancedSearchQuery($extended, new VisitorParameters($Entity->type, $visibilityArr, $teamGroupsArr));
     $whereClause = $advancedQuery->getWhereClause();
     if ($whereClause) {
         $Entity->addToExtendedFilter($whereClause['where'], $whereClause['bindValues']);
@@ -81,12 +81,13 @@ $renderArr = array(
     'categoryArr' => $categoryArr,
     'itemsTypesArr' => $itemsTypesArr,
     'tagsArr' => $tagsArr,
-    'teamGroupsArr' => $teamGroupsArr,
     'statusArr' => $statusArr,
     'usersArr' => $usersArr,
     'visibilityArr' => $visibilityArr,
     'extended' => $extended,
     'extendedError' => $extendedError,
+    'teamGroups' => array_column($teamGroupsArr, 'name'),
+    'whereClause' => print_r($whereClause ?? '', true), // only for dev
 );
 echo $App->render('search.html', $renderArr);
 
@@ -99,8 +100,10 @@ if ($Request->query->count() > 0 && $extendedError === '') {
     /////////////////////////////////////////////////////////////////
     if ($Request->query->has('type')) {
         // Metadata search
-        if ($Request->query->get('metakey')) {
-            $Entity->addMetadataFilter($Request->query->get('metakey'), $Request->query->get('metavalue'));
+        foreach ($Request->query->all('metakey') as $i => $metakey) {
+            if (!empty($metakey)) {
+                $Entity->addMetadataFilter($metakey, $Request->query->all('metavalue')[$i]);
+            }
         }
 
         if ($Request->query->get('type') !== 'experiments') {

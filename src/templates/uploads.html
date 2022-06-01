@@ -2,7 +2,7 @@
 <div id='filesdiv'>
   {% if uploadsArr %}
     <div class='box'>
-      <h3 title='{{ 'Toggle visibility'|trans }}' data-action='toggle-next' data-icon='uploadedFilesIcon'><i id='uploadedFilesIcon' class='fas fa-chevron-circle-down'></i> {% trans %}Attached file
+      <h3 title='{{ 'Toggle visibility'|trans }}' data-action='toggle-next' data-icon='uploadedFilesIcon'><i id='uploadedFilesIcon' class='fas fa-chevron-circle-down'></i> <i class='fas fa-fw fa-paperclip'></i> {% trans %}Attached file
             {% plural uploadsArr|length %}
             Attached files
             {% endtrans %}
@@ -23,35 +23,40 @@
 
                     <!-- INSERT IN TEXT in edit mode for images -->
                     {% if ext matches '/(jpg|jpeg|png|gif|svg)$/i' %}
-                      <a class='dropdown-item inserter clickable' data-link='{{ upload.long_name }}' data-uploadid='{{ upload.id }}'>
-                        <i class='fas fa-image mr-1'></i>{{ 'Insert in text at cursor position'|trans }}</a>
+                      <a class='dropdown-item inserter clickable' data-storage='{{ upload.storage }}' data-link='{{ upload.long_name }}' data-uploadid='{{ upload.id }}'>
+                        <i class='fas fa-fw fa-image mr-1'></i>{{ 'Insert in text at cursor position'|trans }}</a>
                     {% endif %}
 
                     <!-- Edit filename -->
-                    <a class='dropdown-item clickable' data-action='rename-upload' data-id='{{ upload.id }}' data-type='{{ upload.type }}'
+                    <a class='dropdown-item' data-action='rename-upload' data-id='{{ upload.id }}' data-type='{{ upload.type }}'
                       data-itemid='{{ upload.item_id }}' data-msg='{{ 'Edit filename'|trans }}' title='{{ 'Edit filename'|trans }}'>
-                      <i class='fas fa-pencil-alt mr-1'></i>{{ 'Edit filename'|trans }}</a>
+                      <i class='fas fa-fw fa-pencil-alt mr-1'></i>{{ 'Edit filename'|trans }}</a>
 
 
                     <!-- Annotate image -->
                     {% if ext matches '/(jpg|jpeg|png|gif)$/i' %}
-                      <a class='dropdown-item clickable annotateImg' data-itemid='{{ upload.item_id }}' data-id='{{ upload.id }}' data-type='{{ upload.type }}' data-path='{{ upload.long_name }}'>
-                        <i class='fas fa-paint-brush mr-1'></i>{{ 'Annotate this image'|trans }}</a>
+                    <a class='dropdown-item' data-action='annotate-image' data-storage='{{ upload.storage }}' data-path='{{ upload.long_name }}'>
+                        <i class='fas fa-fw fa-paint-brush mr-1'></i>{{ 'Annotate this image'|trans }}</a>
                     {% endif %}
 
                     <!-- Save mol file as image -->
                     {% if ext matches '/(mol)$/i' %}
                       <a class='dropdown-item saveAsImage clickable' data-canvasid='molFile_{{ upload.id }}' data-name='{{ upload.real_name }}'>
-                      <i class='fas fa-image mr-1'></i>{{ 'Save as image'|trans }}</a>
+                      <i class='fas fa-fw fa-image mr-1'></i>{{ 'Save as image'|trans }}</a>
                     {% endif %}
 
                     <!-- Upload a new version -->
-                    <a class='dropdown-item clickable' data-action='replace-upload' data-uploadid='{{ upload.id }}'>
-                      <i class='fas fa-sync-alt mr-1'></i>{{ 'Upload a new version of this file'|trans }}</a>
+                    <a class='dropdown-item' data-action='replace-upload' data-uploadid='{{ upload.id }}'>
+                      <i class='fas fa-fw fa-sync-alt mr-1'></i>{{ 'Upload a new version of this file'|trans }}</a>
 
+                    <!-- More info -->
+                    <a class='dropdown-item' data-action='more-info-upload' data-uploadid='{{ upload.id }}'>
+                      <i class='fas fa-fw fa-info-circle mr-1'></i>{{ 'More information'|trans }}</a>
+
+                    <!-- DESTROY -->
                     <div class='dropdown-divider'></div>
-                    <a class='dropdown-item hover-danger clickable' data-action='destroy-upload' data-uploadid='{{ upload.id }}'>
-                      <i class='fas fa-trash-alt fa-fw mr-1' title='{{ 'Delete'|trans }}'></i>{{ 'Delete'|trans }}
+                    <a class='dropdown-item hover-danger' data-action='destroy-upload' data-uploadid='{{ upload.id }}'>
+                      <i class='fas fa-fw fa-trash-alt fa-fw mr-1' title='{{ 'Delete'|trans }}'></i>{{ 'Delete'|trans }}
                     </a>
                   </div>
                 </div>
@@ -119,14 +124,15 @@
                                   </ul>
                                 </div>
 
+                                <!-- IMPORTANT: here the data-href has the storage first and the filename last or 3Dmol will get confused with the format -->
                                 <div class='viewer_3Dmoljs file-uploaded'
-                                  data-href='app/download.php?f={{ upload.long_name }}&storage={{ upload.storage }}'
+                                  data-href='app/download.php?storage={{ upload.storage }}&f={{ upload.long_name }}'
                                   data-style="{{ ext == 'pdb' ? 'cartoon:color=spectrum' : 'stick'}}"
                                   data-backgroundcolor='0xffffff'
                                   id='3Dmol_{{ upload.id }}'>
                                 </div>
 
-            {% elseif ext in constant('Elabftw\\Elabftw\\Extensions::DNA') and App.Users.userData.use_ove %}
+            {% elseif ext in constant('Elabftw\\Elabftw\\Extensions::DNA') %}
               <div class='viewer-ove'
                    data-href='app/download.php?f={{ upload.long_name }}&storage={{ upload.storage }}'
                 data-real-name='{{ upload.real_name }}'
@@ -137,8 +143,8 @@
             {% endif %}
 
         <div class='caption'>
-          <i class='fas fa-download mr-1'></i>
-          <span>
+          <i class='fas fa-fw fa-download mr-1'></i>
+          <p class='d-inline'>
             <a id='upload-filename_{{ upload.id }}' class='text-break' href='app/download.php?f={{ upload.long_name }}&name={{ upload.real_name }}&storage={{ upload.storage }}' rel='noopener'>{{ upload.real_name }}</a>
             <span class='smallgray' style='display:inline'>
               {% if upload.filesize %}
@@ -146,23 +152,31 @@
               {% endif %}
               {{ upload.created_at }}
             </span>
-          </span>
+          </p>
         <br>
         {# if we are in view mode, we don't show the comment if it's the default text. This is to avoid showing 'Click to add a comment' where in fact you can't click to add a comment because you are in view mode #}
 
         {% if mode == 'edit' or upload.comment != 'Click to add a comment' %}
-          <i class='fas fa-comments'></i>
+          <i class='fas fa-fw fa-comments mr-1'></i>
           <p class='file-comment editable hl-hover d-inline'
             data-type='{{ upload.type }}'
             data-itemid='{{ upload.item_id }}'
-            data-id='{{ upload.id }}'>{{ upload.comment}}</p>
+            data-id='{{ upload.id }}'>{{ upload.comment|raw }}</p><br>
         {% endif %}
 
         {% if ext matches '/(json)$/i' %}
           <div class='clickable'>
-            <i class='fas fa-{{ mode == 'edit' ? 'pencil-alt' : 'eye' }} mr-1'></i><p data-uploadid='{{ upload.id }}' data-name='{{ upload.real_name }}' data-link='{{ upload.long_name }}' data-action='json-load-file' class='d-inline'>{{ 'Load into JSON Editor'|trans }}</p>
+            <i class='fas fa-fw fa-{{ mode == 'edit' ? 'pencil-alt' : 'eye' }} mr-1'></i>
+            <p data-uploadid='{{ upload.id }}' data-name='{{ upload.real_name }}' data-link='{{ upload.long_name }}' data-action='json-load-file' class='d-inline'>{{ 'Load into JSON Editor'|trans }}</p>
           </div>
         {% endif %}
+
+        <div id='moreInfo_{{ upload.id }}' class='d-none'>
+          <i class='fas fa-fw fa-hdd mr-1'></i>
+          <p class='d-inline'>{{ 'Storage:'|trans }} {% if upload.storage == '1' %} {{ 'Local filesystem'|trans }} {% endif %} {% if upload.storage == '2' %} S3 bucket {% endif %}</p><br>
+          <i class='fas fa-fw fa-fingerprint mr-1'></i>
+          <p class='d-inline' style='word-break: break-all;'>{{ upload.hash_algorithm }}: {{ upload.hash }}</p>
+        </div>
 
         </div>
 
@@ -177,7 +191,7 @@
                         <input type='hidden' name='id' value='{{ upload.id }}' />
                         <input type='hidden' name='model' value='upload' />
                         {{ App.Session.get('csrf')|csrf }}
-                        <input type='file' style='display:inline' name='content' />
+                        <input type='file' style='display:inline' name='content' required />
                         <button type='submit' class='button btn btn-primary'>{{ 'OK'|trans }}</button>
                       </form>
                     </div>

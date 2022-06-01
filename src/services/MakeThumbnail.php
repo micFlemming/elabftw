@@ -12,8 +12,6 @@ namespace Elabftw\Services;
 use Elabftw\Elabftw\Extensions;
 use Elabftw\Elabftw\Tools;
 use function exif_read_data;
-use function extension_loaded;
-use function function_exists;
 use Imagick;
 use function in_array;
 use function strtolower;
@@ -65,12 +63,7 @@ final class MakeThumbnail
             return null;
         }
 
-        // try with imagick first
-        // note: gmagick and gd methods have been removed: use docker or install imagick.
-        if (extension_loaded('imagick')) {
-            return $this->useImagick();
-        }
-        return null;
+        return $this->useImagick();
     }
 
     private function useImagick(): string
@@ -105,7 +98,8 @@ final class MakeThumbnail
         // if the image has exif with rotation data, read it so the thumbnail can have a correct orientation
         // only the thumbnail is rotated, the original image stays untouched
         $ext = Tools::getExt($this->longName);
-        if (function_exists('exif_read_data') && in_array(strtolower($ext), Extensions::HAS_EXIF, true)) {
+        if (in_array(strtolower($ext), Extensions::HAS_EXIF, true)
+            && $this->mime === 'image/jpeg') {
             // create a stream from the file content so exif_read_data can read it
             $stream = fopen(sprintf('data://text/plain;base64,%s', base64_encode($this->content)), 'rb');
             if ($stream === false) {

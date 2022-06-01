@@ -9,15 +9,21 @@
 
 namespace Elabftw\Services;
 
+use function bindtextdomain;
 use function count;
+use function dirname;
 use Elabftw\Elabftw\Db;
-use Elabftw\Elabftw\Tools;
 use Elabftw\Exceptions\ImproperActionException;
 use Elabftw\Models\Notifications;
 use Elabftw\Models\Users;
 use function json_decode;
 use PDO;
+use function putenv;
+use function setlocale;
+use const SITE_URL;
+use function sprintf;
 use Symfony\Component\Mime\Address;
+use function textdomain;
 
 /**
  * Email notification system
@@ -69,10 +75,16 @@ class EmailNotifications
 
     private function getNotificationsToSend(): array
     {
-        $sql = 'SELECT id, userid, category, body FROM notifications WHERE send_email = 1 AND email_sent = 0';
+        $sql = 'SELECT id, userid, category, body FROM notifications WHERE send_email = 1 AND email_sent = 0 AND (
+            CASE WHEN category = :deadline THEN CAST(NOW() AS DATETIME) > CAST(
+                DATE_ADD(
+                    CAST(JSON_EXTRACT(body, "$.deadline") AS DATETIME), INTERVAL - 30 MINUTE) AS DATETIME)
+            ELSE 1=1 END)';
         $req = $this->Db->prepare($sql);
+        $req->bindValue(':deadline', Notifications::STEP_DEADLINE, PDO::PARAM_INT);
         $this->Db->execute($req);
-        return $this->Db->fetchAll($req);
+
+        return $req->fetchAll();
     }
 
     /**
@@ -86,13 +98,19 @@ class EmailNotifications
             case Notifications::COMMENT_CREATED:
                 $subject .= _('New comment posted');
                 $commenter = new Users((int) $notifBody['commenter_userid']);
-                $url = Tools::getUrl() . '/experiments.php?mode=view&id=' . $notifBody['experiment_id'];
+                $url = SITE_URL . '/experiments.php?mode=view&id=' . $notifBody['experiment_id'];
 
                 $body = sprintf(
                     _('Hi. %s left a comment on your experiment. Have a look: %s'),
                     $commenter->userData['fullname'],
                     $url,
                 );
+                break;
+            case Notifications::EVENT_DELETED:
+                $info = _('A booked slot was deleted from the scheduler.');
+                $subject .= $info;
+                $url = SITE_URL . '/team.php?item=' . $notifBody['event']['item'];
+                $body = sprintf(_('Hi. %s (%s). See item: %s. It was booked from %s to %s.'), $info, $notifBody['actor'], $url, $notifBody['event']['start'], $notifBody['event']['end']);
                 break;
             case Notifications::USER_CREATED:
                 $subject .= _('New user added to your team');
@@ -111,8 +129,8 @@ class EmailNotifications
                     $user->userData['fullname'],
                     $user->userData['email'],
                 );
-                $url = Tools::getUrl() . '/admin.php';
-                $body = $base . sprintf(_('Head to the admin panel to validate the account: %s'), $url);
+                $url = SITE_URL . '/admin.php';
+                $body = $base . ' ' . sprintf(_('Head to the admin panel to validate the account: %s'), $url);
                 break;
             case Notifications::SELF_NEED_VALIDATION:
                 $subject .= _('Your account has been created');
@@ -120,8 +138,13 @@ class EmailNotifications
                 break;
             case Notifications::SELF_IS_VALIDATED:
                 $subject .= _('Account validated');
-                $url = Tools::getUrl() . '/login.php';
+                $url = SITE_URL . '/login.php';
                 $body = _('Hello. Your account on eLabFTW was validated by an admin. Follow this link to login: ') . $url;
+                break;
+            case Notifications::STEP_DEADLINE:
+                $subject .= _('A step deadline is approaching');
+                $url = SITE_URL . '/' . $notifBody['entity_page'] . '.php?mode=view&id=' . $notifBody['entity_id'];
+                $body = _('Hello. A step deadline is approaching: ') . $url;
                 break;
             default:
                 throw new ImproperActionException('Invalid notification category');

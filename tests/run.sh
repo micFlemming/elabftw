@@ -1,4 +1,4 @@
-#! /bin/sh
+#!/usr/bin/env sh
 #
 # @author Nicolas CARPi <nico-git@deltablot.email>
 # @copyright 2012 Nicolas CARPi
@@ -10,29 +10,28 @@
 
 # stop on failure
 set -eu
+# detect if we are in scrutinizer ci (https://scrutinizer-ci.com/g/elabftw/elabftw/)
 scrutinizer=${SCRUTINIZER:-false}
 
-# only use sudo if available e.g., alpine vs ubuntu
-sudoCmd=''
-if command -v sudo &> /dev/null; then
-    sudoCmd='sudo'
-fi
-
-# make sure we tear down everything when script ends
+# when the script stops (or is stopped), replace the test config with the dev config
 cleanup() {
-if (! $scrutinizer); then
-    $sudoCmd cp -v config.php.dev config.php
-    $sudoCmd chown 101:101 config.php
-fi
+    if (! $scrutinizer); then
+        cp -v config.php.dev config.php
+    fi
 }
 trap cleanup EXIT
 
-# sudo is needed because config file for docker is owned by 100:101
+# make a backup of the current (dev) config
 if (! $scrutinizer); then
-    $sudoCmd cp -v config.php config.php.dev
+    cp -v config.php config.php.dev
 fi
-$sudoCmd cp -v tests/config-home.php config.php
-$sudoCmd chmod +r config.php
+cp -v tests/config-home.php config.php
+
+# if there are no custom env_file, touch one, as this will trigger an error
+if [ ! -f tests/elabftw-user.env ]; then
+    touch tests/elabftw-user.env
+fi
+
 # launch a fresh environment if needed
 if [ ! "$(docker ps -q -f name=mysqltmp)" ]; then
     if ($scrutinizer); then
@@ -43,7 +42,8 @@ if [ ! "$(docker ps -q -f name=mysqltmp)" ]; then
         sed -i '\#/elabftw/tests/_output/coverage#D' tests/docker-compose.yml
         # Use the freshly built elabtmp image
         sed -i 's#elabftw/elabimg:hypernext#elabtmp#' tests/docker-compose.yml
-        docker build -t elabtmp -f tests/scrutinizer.dockerfile --progress plain .
+        export DOCKER_BUILDKIT=1 BUILDKIT_PROGRESS=plain COMPOSE_DOCKER_CLI_BUILD=1
+        docker build -q -t elabtmp -f tests/scrutinizer.dockerfile .
     fi
     docker-compose -f tests/docker-compose.yml up -d --quiet-pull
     # give some time for containers to start
@@ -52,22 +52,24 @@ if [ ! "$(docker ps -q -f name=mysqltmp)" ]; then
 fi
 if ($scrutinizer); then
     # install and initial tests
-    docker exec -it elabtmp yarn install --silent --non-interactive
+    docker exec -it elabtmp yarn install --silent --non-interactive --frozen-lockfile
     docker exec -it elabtmp yarn csslint
     docker exec -it elabtmp yarn jslint-ci
-    docker exec -it elabtmp yarn buildall
+    docker exec -it elabtmp yarn buildall:dev
     docker exec -it elabtmp composer install --no-progress -q
     docker exec -it elabtmp yarn phpcs-dry
+    # allow tmpfile, used by phpstan
+    docker exec -it elabtmp sed -i 's/tmpfile, //' /etc/php8/php.ini
     # extend open_basedir
     # /usr/bin/psalm, //autoload.php, /root/.cache/ are for psalm
     # /usr/bin/phpstan, /proc/cpuinfo is for phpstan, https://github.com/phpstan/phpstan/issues/4427 https://github.com/phpstan/phpstan/issues/2965
     docker exec -it elabtmp sed -i 's|^open_basedir*|&:/usr/bin/psalm://autoload\.php:/root/\.cache/:/usr/bin/phpstan:/proc/cpuinfo|' /etc/php8/php.ini
 fi
 # install the database
-docker exec -it elabtmp bin/install start -r
+echo "Initializing the database..."
+docker exec -it elabtmp bin/install start -r -q
 if ($scrutinizer); then
-    docker exec -it elabtmp yarn psalm
-    docker exec -it elabtmp yarn phpstan
+    docker exec -it elabtmp yarn static
 fi
 # populate the database
 docker exec -it elabtmp bin/console dev:populate tests/populate-config.yml

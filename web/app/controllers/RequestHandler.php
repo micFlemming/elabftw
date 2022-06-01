@@ -21,9 +21,11 @@ use Elabftw\Models\ApiKeys;
 use Elabftw\Models\Config;
 use Elabftw\Models\Experiments;
 use Elabftw\Models\ItemsTypes;
+use Elabftw\Models\Links;
 use Elabftw\Models\Status;
 use Elabftw\Models\Tags;
 use Elabftw\Models\Teams;
+use Elabftw\Models\Users2Teams;
 use Exception;
 use PDOException;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -44,15 +46,7 @@ $Response->setData(array(
 $res = '';
 
 try {
-    // first determine which processor we need depending on the request type
-    if ($Request->headers->get('Content-Type') === 'application/json') {
-        $Processor = new JsonProcessor($App->Users, $Request);
-    } elseif ($Request->getMethod() === 'GET') {
-        $Processor = new RequestProcessor($App->Users, $Request);
-    } else {
-        $Processor = new FormProcessor($App->Users, $Request);
-    }
-
+    $Processor = (new ProcessorFactory)->getProcessor($App->Users, $Request);
     $action = $Processor->getAction();
     $Model = $Processor->getModel();
     $Params = $Processor->getParams();
@@ -67,8 +61,9 @@ try {
         throw new IllegalActionException('Non admin user tried to edit status or items types.');
     }
     // only sysadmins can update the config
-    if ($action === 'update' && $Model instanceof Config && !$App->Users->userData['is_sysadmin']) {
-        throw new IllegalActionException('Non sysadmin user tried to update instance config.');
+    if ((($action === 'update' && $Model instanceof Config)
+        || (($action === 'create' || $action === 'destroy') && $Model instanceof Users2Teams)) && !$App->Users->userData['is_sysadmin']) {
+        throw new IllegalActionException('Non sysadmin user tried to update instance config or edit users2teams.');
     }
 
 
@@ -94,8 +89,12 @@ try {
                 || $App->Config->configArr['deletable_xp'] === '0') {
                 throw new ImproperActionException('You cannot delete experiments!');
             }
+            $res = $Model->destroy();
+        } elseif ($Model instanceof Users2Teams) {
+            $res = $Model->destroy($Params);
+        } else {
+            $res = $Model->destroy();
         }
-        $res = $Model->destroy();
     } elseif ($action === 'destroystamppass' && ($Model instanceof Config || $Model instanceof Teams)) {
         $res = $Model->destroyStamppass();
     } elseif ($action === 'duplicate' && $Model instanceof AbstractEntity) {
@@ -104,6 +103,10 @@ try {
         $res = $Model->deduplicate();
     } elseif ($action === 'lock' && $Model instanceof AbstractEntity) {
         $res = $Model->toggleLock();
+    } elseif ($action === 'pin' && $Model instanceof AbstractEntity) {
+        $res = $Model->Pins->togglePin();
+    } elseif ($action === 'importlinks' && $Model instanceof Links) {
+        $res = $Model->import();
     }
 
     // special case for uploading an edited json file back: it's a POSTed async form

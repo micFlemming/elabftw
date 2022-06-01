@@ -63,6 +63,29 @@ class Check
     }
 
     /**
+     * Currently a usergroup is 1, 2 or 4
+     */
+    public static function usergroup(int $gid): bool
+    {
+        switch ($gid) {
+        case 1:
+        case 2:
+        case 4:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    public static function usergroupOrExplode(int $gid): int
+    {
+        if (self::usergroup($gid) === false) {
+            throw new IllegalActionException('Invalid usergroup');
+        }
+        return $gid;
+    }
+
+    /**
      * Get only the relevant part of the color: remove the #
      *
      * @param string $color #121212
@@ -167,28 +190,41 @@ class Check
     {
         $allowed = array(
             'all',
+            'blox_anon',
+            'blox_enabled',
             'body',
             'bodyappend',
             'boundevent',
             'comment',
             'date',
+            'deadline',
+            'deadline_notif',
             'file',
             'finished',
+            'finished_time',
             'list',
             'member',
             'metadata',
-            'notif_new_comment',
-            'notif_new_comment_email',
+            'metadatafield',
+            'notif_comment_created',
+            'notif_comment_created_email',
+            'notif_user_created',
+            'notif_user_created_email',
+            'notif_user_need_validation',
+            'notif_user_need_validation_email',
+            'notif_step_deadline',
+            'notif_step_deadline_email',
+            'notif_event_deleted',
+            'notif_event_deleted_email',
             'privacypolicy',
             'rating',
             'real_name',
             'state',
             'ts_authority',
             'ts_cert',
+            'ts_limit',
             'ts_login',
-            'ts_override',
             'ts_password',
-            'ts_share',
             'ts_url',
             'title',
             'unreference',

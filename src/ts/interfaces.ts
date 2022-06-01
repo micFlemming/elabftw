@@ -10,10 +10,11 @@ interface ResponseMsg {
   res: boolean;
   msg: string;
   color?: string;
-  value?: string | Array<Todoitem> | Array<BoundEvent> | Array<UnfinishedEntities> | Array<Upload> | object | MetadataJson;
+  value?: string | Array<Todoitem> | Array<BoundEvent> | Array<UnfinishedEntities> | Array<Upload> | object | PartialEntity;
 }
 
-interface MetadataJson {
+interface PartialEntity {
+  body: string;
   metadata: string;
 }
 
@@ -59,7 +60,9 @@ enum Action {
   DestroyStamppass = 'destroystamppass',
   Deduplicate = 'deduplicate',
   Duplicate = 'duplicate',
+  ImportLinks = 'importlinks',
   Lock = 'lock',
+  Pin = 'pin',
 }
 
 enum Model {
@@ -79,6 +82,7 @@ enum Model {
   Todolist = 'todolist',
   Upload = 'upload',
   User = 'user',
+  User2Team = 'user2team',
 }
 
 enum EntityType {
@@ -94,11 +98,13 @@ enum Target {
   BoundEvent = 'boundevent',
   Comment = 'comment',
   Date = 'date',
+  Deadline = 'deadline',
+  DeadlineNotif = 'deadline_notif',
   Finished = 'finished',
   List = 'list',
   Member = 'member',
   Metadata = 'metadata',
-  TsOverride = 'ts_override',
+  MetadataField = 'metadatafield',
   TsAuthority = 'ts_authority',
   PrivacyPolicy = 'privacypolicy',
   Rating = 'rating',
@@ -137,12 +143,12 @@ export {
   Payload,
   Method,
   Action,
-  MetadataJson,
   Model,
   Target,
   Todoitem,
   EntityType,
   Entity,
+  PartialEntity,
   UnfinishedEntities,
   Upload,
 };

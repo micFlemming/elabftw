@@ -55,12 +55,28 @@ class TeamsHelper
     {
         $sql = 'SELECT userid FROM users
             CROSS JOIN users2teams ON (users2teams.users_id = users.userid)
-            WHERE validated = 1 AND archived = 0 AND users2teams.teams_id = :team AND (`usergroup` = 1 OR `usergroup` = 2 OR `usergroup` = 3)';
+            WHERE validated = 1 AND archived = 0 AND users2teams.teams_id = :team AND (`usergroup` IN (1, 2))';
         $req = $this->Db->prepare($sql);
         $req->bindParam(':team', $this->team, PDO::PARAM_INT);
         $this->Db->execute($req);
 
-        return array_column($this->Db->fetchAll($req), 'userid');
+        return array_column($req->fetchAll(), 'userid');
+    }
+
+    /**
+     * Are we the first user to register in a team?
+     */
+    public function isFirstUserInTeam(): bool
+    {
+        $sql = 'SELECT COUNT(*) AS usernb FROM users
+            CROSS JOIN users2teams ON (users2teams.users_id = users.userid)
+            WHERE users2teams.teams_id = :team';
+        $req = $this->Db->prepare($sql);
+        $req->bindParam(':team', $this->team, PDO::PARAM_INT);
+        $this->Db->execute($req);
+        $test = $req->fetch();
+
+        return $test['usernb'] === '0';
     }
 
     /**
@@ -70,22 +86,6 @@ class TeamsHelper
     {
         $sql = 'SELECT COUNT(*) AS usernb FROM users';
         $req = $this->Db->prepare($sql);
-        $this->Db->execute($req);
-        $test = $req->fetch();
-
-        return $test['usernb'] === '0';
-    }
-
-    /**
-     * Are we the first user to register in a team?
-     */
-    private function isFirstUserInTeam(): bool
-    {
-        $sql = 'SELECT COUNT(*) AS usernb FROM users
-            CROSS JOIN users2teams ON (users2teams.users_id = users.userid)
-            WHERE users2teams.teams_id = :team';
-        $req = $this->Db->prepare($sql);
-        $req->bindParam(':team', $this->team, PDO::PARAM_INT);
         $this->Db->execute($req);
         $test = $req->fetch();
 

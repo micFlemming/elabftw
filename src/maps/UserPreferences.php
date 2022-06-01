@@ -64,8 +64,6 @@ class UserPreferences implements MapInterface
 
     private int $useMarkdown = 0;
 
-    private int $useOve = 1;
-
     private int $useIsodate = 0;
 
     private int $incFilesPdf = 1;
@@ -73,8 +71,6 @@ class UserPreferences implements MapInterface
     private int $appendPdfs = 0;
 
     private int $chemEditor = 0;
-
-    private int $jsonEditor = 0;
 
     private string $lang = 'en_GB';
 
@@ -104,7 +100,6 @@ class UserPreferences implements MapInterface
             show_team_templates = :new_show_team_templates,
             show_public = :new_show_public,
             chem_editor = :new_chem_editor,
-            json_editor = :new_json_editor,
             lang = :new_lang,
             default_read = :new_default_read,
             default_write = :new_default_write,
@@ -114,7 +109,6 @@ class UserPreferences implements MapInterface
             pdfa = :new_pdfa,
             pdf_format = :new_pdf_format,
             use_markdown = :new_use_markdown,
-            use_ove = :new_use_ove,
             use_isodate = :new_use_isodate,
             inc_files_pdf = :new_inc_files_pdf,
             append_pdfs = :new_append_pdfs
@@ -133,7 +127,6 @@ class UserPreferences implements MapInterface
         $req->bindParam(':new_show_team_templates', $this->showTeamTemplates);
         $req->bindParam(':new_show_public', $this->showPublic);
         $req->bindParam(':new_chem_editor', $this->chemEditor);
-        $req->bindParam(':new_json_editor', $this->jsonEditor);
         $req->bindParam(':new_lang', $this->lang);
         $req->bindParam(':new_default_read', $this->defaultRead);
         $req->bindParam(':new_default_write', $this->defaultWrite);
@@ -143,7 +136,6 @@ class UserPreferences implements MapInterface
         $req->bindParam(':new_pdfa', $this->pdfa);
         $req->bindParam(':new_pdf_format', $this->pdfFormat);
         $req->bindParam(':new_use_markdown', $this->useMarkdown);
-        $req->bindParam(':new_use_ove', $this->useOve);
         $req->bindParam(':new_use_isodate', $this->useIsodate);
         $req->bindParam(':new_inc_files_pdf', $this->incFilesPdf);
         $req->bindParam(':new_append_pdfs', $this->appendPdfs);
@@ -233,11 +225,6 @@ class UserPreferences implements MapInterface
         $this->useMarkdown = Filter::toBinary($setting);
     }
 
-    final public function setUseOve(string $setting): void
-    {
-        $this->useOve = Filter::toBinary($setting);
-    }
-
     final public function setUseIsodate(string $setting): void
     {
         $this->useIsodate = Filter::toBinary($setting);
@@ -256,11 +243,6 @@ class UserPreferences implements MapInterface
     final public function setChemEditor(string $setting): void
     {
         $this->chemEditor = Filter::toBinary($setting);
-    }
-
-    final public function setJsonEditor(string $setting): void
-    {
-        $this->jsonEditor = Filter::toBinary($setting);
     }
 
     final public function setLang(string $setting): void
@@ -307,12 +289,10 @@ class UserPreferences implements MapInterface
         $this->setPdfa($source['pdfa'] ?? '0');
         $this->setPdfFormat($source['pdf_format'] ?? $this->pdfFormat);
         $this->setUseMarkdown($source['use_markdown'] ?? '0');
-        $this->setUseOve($source['use_ove'] ?? '0');
         $this->setUseIsodate($source['use_isodate'] ?? '0');
         $this->setIncFilesPdf($source['inc_files_pdf'] ?? '0');
         $this->setAppendPdfs($source['append_pdfs'] ?? '0');
         $this->setChemEditor($source['chem_editor'] ?? '0');
-        $this->setJsonEditor($source['json_editor'] ?? '0');
         $this->setDefaultRead($source['default_read'] ?? $this->defaultRead);
         $this->setDefaultWrite($source['default_write'] ?? $this->defaultWrite);
     }
@@ -340,12 +320,10 @@ class UserPreferences implements MapInterface
             pdfa,
             pdf_format,
             use_markdown,
-            use_ove,
             use_isodate,
             inc_files_pdf,
             append_pdfs,
             chem_editor,
-            json_editor,
             default_read,
             default_write
             FROM users WHERE userid = :id';

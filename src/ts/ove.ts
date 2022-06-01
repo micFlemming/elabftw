@@ -12,8 +12,8 @@ declare global {
   }
 }
 
-import anyToJson from 'bio-parsers/es/parsers/anyToJson';
-import { notif } from './misc';
+import { anyToJson } from 'bio-parsers/umd/bio-parsers';
+import { notif, reloadElement } from './misc';
 
 // DISPLAY Plasmids FILES
 export function displayPlasmidViewer(about: DOMStringMap): void {
@@ -21,6 +21,7 @@ export function displayPlasmidViewer(about: DOMStringMap): void {
   Array.from(document.getElementsByClassName('viewer-ove')).forEach(el => {
     const oveDivDataset = (el as HTMLDivElement).dataset;
     const viewerID = el.id;
+    const isSnapGeneFile = (new URL(oveDivDataset.href, window.location.origin)).searchParams.get('f').slice(-4) === '.dna';
     const filename = oveDivDataset.href;
     const realName = oveDivDataset.realName;
 
@@ -37,7 +38,7 @@ export function displayPlasmidViewer(about: DOMStringMap): void {
       reader.onloadend = function(): void {
         $.post('app/controllers/EntityAjaxController.php', {
           saveAsImage: true,
-          realName: realName,
+          realName: realName + '.png',
           content: reader.result, // the png as data url
           id: about.id,
           type: about.type,
@@ -129,7 +130,7 @@ export function displayPlasmidViewer(about: DOMStringMap): void {
         generatePng: true,
         handleFullscreenClose: function(): void { // event could be used as parameter
           editor[viewerID].close();
-          $('#filesdiv').load('?mode=' + about.page + '&id=' + about.id + ' #filesdiv > *');
+          reloadElement('filesdiv');
         },
         onCopy: function(event, copiedSequenceData, editorState): void {
           // the copiedSequenceData is the subset of the sequence that has been copied in the teselagen sequence format
@@ -240,7 +241,7 @@ export function displayPlasmidViewer(about: DOMStringMap): void {
     }
 
     // load DNA data either as File (.dna files Snapgene) or as String
-    if (filename.slice(-4) === '.dna') {
+    if (isSnapGeneFile) {
       const xhr = new XMLHttpRequest();
       xhr.open('GET', filename, true);
       xhr.responseType = 'blob';

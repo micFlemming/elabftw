@@ -11,9 +11,9 @@ namespace Elabftw\Services;
 
 use function date;
 use DateTime;
-use function dirname;
 use Elabftw\Elabftw\ContentParams;
 use Elabftw\Elabftw\CreateNotificationParams;
+use Elabftw\Elabftw\FsTools;
 use Elabftw\Elabftw\Tools;
 use Elabftw\Interfaces\FileMakerInterface;
 use Elabftw\Interfaces\MpdfProviderInterface;
@@ -26,9 +26,10 @@ use Elabftw\Traits\PdfTrait;
 use Elabftw\Traits\TwigTrait;
 use Elabftw\Traits\UploadTrait;
 use function implode;
+use League\Flysystem\Filesystem;
 use Mpdf\Mpdf;
-use function preg_replace;
 use setasign\Fpdi\FpdiException;
+use const SITE_URL;
 use function str_replace;
 use function strtolower;
 use Symfony\Component\HttpFoundation\Request;
@@ -44,7 +45,16 @@ class MakePdf extends AbstractMake implements FileMakerInterface
 
     public string $longName;
 
-    private array $failedAppendPdfs = array();
+    public array $failedAppendPdfs = array();
+
+    // collect paths of files to delete
+    public array $trash = array();
+
+    // switch to disable notifications from within class
+    // if notifications are handled by calling class
+    public bool $createNotifications = true;
+
+    private FileSystem $cacheFs;
 
     /**
      * Constructor
@@ -65,6 +75,16 @@ class MakePdf extends AbstractMake implements FileMakerInterface
         // see https://github.com/baselbers/mpdf/commit
         // 5cbaff4303604247f698afc6b13a51987a58f5bc#commitcomment-23217652
         error_reporting(E_ERROR);
+
+        $this->cacheFs = (new StorageFactory(StorageFactory::CACHE))->getStorage()->getFs();
+    }
+
+    public function __destruct()
+    {
+        // delete the temporary files once we're done with it
+        foreach ($this->trash as $filename) {
+            $this->cacheFs->delete($filename);
+        }
     }
 
     /**
@@ -72,7 +92,12 @@ class MakePdf extends AbstractMake implements FileMakerInterface
      */
     public function getFileContent(): string
     {
-        return $this->generate()->Output('', 'S');
+        $output = $this->generate()->Output('', 'S');
+        if ($this->errors && $this->createNotifications) {
+            $Notifications = new Notifications($this->Entity->Users);
+            $Notifications->create(new CreateNotificationParams(Notifications::PDF_GENERIC_ERROR));
+        }
+        return $output;
     }
 
     /**
@@ -94,40 +119,73 @@ class MakePdf extends AbstractMake implements FileMakerInterface
 
         // Inform user that there was a problem with Tex rendering
         if ($Tex2Svg->mathJaxFailed) {
-            $body = array(
-                'entity_id' => $this->Entity->id,
-                'entity_page' => $this->Entity->page,
+            $this->errors[] = array(
+                'type' => Notifications::MATHJAX_FAILED,
+                'body' => array(
+                    'entity_id' => $this->Entity->id,
+                    'entity_page' => $this->Entity->page,
+                ),
             );
-            $Notifications = new Notifications($this->Entity->Users);
-            $Notifications->create(new CreateNotificationParams(Notifications::MATHJAX_FAILED, $body));
         }
         return $content;
     }
 
     /**
+     * Get a list of all PDFs that are attached to an entity
+     *
+     * @return array Empty or array of arrays with information for PDFs array('path/to/file', 'real_name')
+     */
+    public function getAttachedPdfs(): array
+    {
+        $uploadsArr = $this->Entity->Uploads->readAllNormal();
+        $listOfPdfs = array();
+
+        if (empty($uploadsArr)) {
+            return $listOfPdfs;
+        }
+
+        foreach ($uploadsArr as $upload) {
+            $storageFs = (new StorageFactory((int) $upload['storage']))->getStorage()->getFs();
+            if ($storageFs->fileExists($upload['long_name']) && strtolower(Tools::getExt($upload['real_name'])) === 'pdf') {
+                // the real_name is used in case of error appending it
+                // the content is stored in a temporary file so it can be read with appendPdfs()
+                $tmpPath = FsTools::getCacheFile();
+                $filename = basename($tmpPath);
+                $this->cacheFs->writeStream($filename, $storageFs->readStream($upload['long_name']));
+                $listOfPdfs[] = array($tmpPath, $upload['real_name']);
+                // add the temporary file to the trash
+                $this->trash[] = $filename;
+            }
+        }
+
+        return $listOfPdfs;
+    }
+
+    /**
      * Append PDFs attached to an entity
      */
-    private function appendPdfs(array $pdfs): void
+    public function appendPdfs(array $pdfs, ?Mpdf $mpdf = null): void
     {
+        $mpdf = $mpdf ?? $this->mpdf;
         foreach ($pdfs as $pdf) {
             // There will be cases where the merging will fail
             // due to incompatibilities of Mpdf (actually fpdi) with the pdfs
             // See https://manuals.setasign.com/fpdi-manual/v2/limitations/
             // These cases will be caught and ignored
             try {
-                $numberOfPages = $this->mpdf->setSourceFile($pdf[0]);
+                $numberOfPages = $mpdf->setSourceFile($pdf[0]);
 
                 for ($i = 1; $i <= $numberOfPages; $i++) {
                     // Import the ith page of the source PDF file
-                    $page = $this->mpdf->importPage($i);
+                    $page = $mpdf->importPage($i);
 
                     // getTemplateSize() is not documented in the MPDF manual
                     // @return array|bool An array with following keys: width, height, 0 (=width), 1 (=height), orientation (L or P)
-                    $pageDim = $this->mpdf->getTemplateSize($page);
+                    $pageDim = $mpdf->getTemplateSize($page);
 
                     if (is_array($pageDim)) { // satisfy phpstan
                         // add a new (blank) page with the dimensions of the imported page
-                        $this->mpdf->AddPageByArray(array(
+                        $mpdf->AddPageByArray(array(
                             'orientation' => $pageDim['orientation'],
                             'sheet-size' => array($pageDim['width'], $pageDim['height']),
                         ));
@@ -135,11 +193,11 @@ class MakePdf extends AbstractMake implements FileMakerInterface
 
                     // empty the header and footer
                     // cannot be an empty string
-                    $this->mpdf->SetHTMLHeader(' ', '', true);
-                    $this->mpdf->SetHTMLFooter(' ', '');
+                    $mpdf->SetHTMLHeader(' ', '', true);
+                    $mpdf->SetHTMLFooter(' ', '');
 
                     // add the content of the imported page
-                    $this->mpdf->useTemplate($page);
+                    $mpdf->useTemplate($page);
                 }
                 // not all pdf will be able to be integrated, so for the one that will trigger an exception
             // we simply ignore it and collect information for notification
@@ -179,6 +237,17 @@ class MakePdf extends AbstractMake implements FileMakerInterface
             $lockDate = $ldate[0] . ' at ' . $ldate[1];
         }
 
+        // read the content of the thumbnail here to feed the template
+        $uploadsArr = $this->Entity->Uploads->readAllNormal();
+        foreach ($uploadsArr as $key => $upload) {
+            $storageFs = (new StorageFactory((int) $upload['storage']))->getStorage()->getFs();
+            $thumbnail = $upload['long_name'] . '_th.jpg';
+            // no need to filter on extension, just insert the thumbnail if it exists
+            if ($storageFs->fileExists($thumbnail)) {
+                $uploadsArr[$key]['base64_thumbnail'] = base64_encode($storageFs->read($thumbnail));
+            }
+        }
+
         $renderArr = array(
             'body' => $this->getBody(),
             'commentsArr' => $this->Entity->Comments->read(new ContentParams()),
@@ -196,42 +265,13 @@ class MakePdf extends AbstractMake implements FileMakerInterface
             'stepsArr' => $this->Entity->Steps->read(new ContentParams()),
             'tags' => $this->Entity->entityData['tags'],
             'title' => $this->Entity->entityData['title'],
-            'uploadsArr' => $this->Entity->Uploads->readAll(),
-            'uploadsFolder' => dirname(__DIR__, 2) . '/uploads/',
-            'url' => $this->getUrl(),
-            'linkBaseUrl' => Tools::getUrl() . '/database.php',
+            'uploadsArr' => $uploadsArr,
+            'url' => $this->getURL(),
+            'linkBaseUrl' => SITE_URL . '/database.php',
             'useCjk' => $this->Entity->Users->userData['cjk_fonts'],
         );
 
-        $html = $this->getTwig(Config::getConfig())->render('pdf.html', $renderArr);
-
-        // now remove any img src pointing to outside world
-        // prevent blind ssrf (thwarted by CSP on webpage, but not in pdf)
-        return preg_replace('/img src=("|\')(ht|f|)tp/i', 'nope', $html);
-    }
-
-    /**
-     * Get a list of all PDFs that are attached to an entity
-     *
-     * @return array Empty or array of arrays with information for PDFs array('path/to/file', 'real.name')
-     */
-    private function getAttachedPdfs(): array
-    {
-        $uploadsArr = $this->Entity->Uploads->readAllNormal();
-        $listOfPdfs = array();
-
-        if (empty($uploadsArr)) {
-            return $listOfPdfs;
-        }
-
-        foreach ($uploadsArr as $upload) {
-            $filePath = dirname(__DIR__, 2) . '/uploads/' . $upload['long_name'];
-            if (file_exists($filePath) && strtolower(Tools::getExt($upload['real_name'])) === 'pdf') {
-                $listOfPdfs[] = array($filePath, $upload['real_name']);
-            }
-        }
-
-        return $listOfPdfs;
+        return $this->getTwig(Config::getConfig())->render('pdf.html', $renderArr);
     }
 
     /**
@@ -244,17 +284,17 @@ class MakePdf extends AbstractMake implements FileMakerInterface
 
         if ($this->Entity->Users->userData['append_pdfs']) {
             $this->appendPdfs($this->getAttachedPdfs());
-            if (!empty($this->failedAppendPdfs)) {
-                $body = array(
-                    'entity_id' => $this->Entity->id,
-                    'entity_page' => $this->Entity->page,
-                    'file_names' => implode(', ', $this->failedAppendPdfs),
+            if ($this->failedAppendPdfs) {
+                $this->errors[] = array(
+                    'type' => Notifications::PDF_APPENDMENT_FAILED,
+                    'body' => array(
+                        'entity_id' => $this->Entity->id,
+                        'entity_page' => $this->Entity->page,
+                        'file_names' => implode(', ', $this->failedAppendPdfs),
+                    ),
                 );
-                $Notifications = new Notifications($this->Entity->Users);
-                $Notifications->create(new CreateNotificationParams(Notifications::PDF_APPENDMENT_FAILED, $body));
             }
         }
-
         return $this->mpdf;
     }
 
@@ -265,7 +305,29 @@ class MakePdf extends AbstractMake implements FileMakerInterface
         // the next line (HTMLPurifier) rescues the invalid parts and thus avoids some MathJax errors
         // the consequence is a slightly different layout
         $body = Filter::body($body);
-        // we need to fix the file path in the body so it shows properly into the pdf for timestamping (issue #131)
-        return str_replace('src="app/download.php?f=', 'src="' . dirname(__DIR__, 2) . '/uploads/', $body);
+
+        // now this part of the code will look for embeded images in the text and download them from storage and insert them as base64
+        // it would have been preferable to avoid such complexity and regexes, but this is the most robust way to get images in there.
+        // it works for gif png jpg images from any storage source
+        $matches = array();
+        // ampersand (&) in html attributes is encoded (&amp;) so we need to use &amp; in the regex
+        preg_match_all('/app\/download.php\?f=[[:alnum:]]{2}\/[[:alnum:]]{128}\.(?:png|jpeg|jpg|gif)(?:&amp;storage=[0-9])?/', $body, $matches);
+        foreach ($matches[0] as $src) {
+            // src will look like: app/download.php?f=c2/c2741a{...}016a3.png&amp;storage=1
+            // so we parse it to get the file path and storage type
+            $query = parse_url($src, PHP_URL_QUERY);
+            if (!$query) {
+                continue;
+            }
+            $res = array();
+            parse_str($query, $res);
+            // there might be no storage value. In this case get it from the uploads table via the long name
+            $storage = (int) ($res['amp;storage'] ?? $this->Entity->Uploads->getStorageFromLongname($res['f']));
+            $storageFs = (new StorageFactory($storage))->getStorage()->getFs();
+            $encoded = base64_encode($storageFs->read($res['f']));
+            // get filetype based on extension so we can declare correctly the type of image
+            $body = str_replace($src, 'data:image/' . Tools::getMimeExt($res['f']) . ';base64,' . $encoded, $body);
+        }
+        return $body;
     }
 }

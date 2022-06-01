@@ -9,7 +9,6 @@
 
 namespace Elabftw\Services;
 
-use Elabftw\Models\Config;
 use Elabftw\Models\Items;
 use ZipStream\ZipStream;
 
@@ -21,6 +20,8 @@ abstract class AbstractMakeZip extends AbstractMake
     protected ZipStream $Zip;
 
     protected string $folder = '';
+
+    protected array $foldersUsedSoFar = array();
 
     abstract public function getZip(): void;
 
@@ -34,7 +35,20 @@ abstract class AbstractMakeZip extends AbstractMake
         if ($this->Entity instanceof Items) {
             $prefix = 'category';
         }
-        return sprintf('%s - %s', $this->Entity->entityData[$prefix], Filter::forFilesystem($this->Entity->entityData['title']));
+
+        $folderName = sprintf(
+            '%s - %s',
+            // category is user input, better filter it
+            Filter::forFilesystem($this->Entity->entityData[$prefix]),
+            Filter::forFilesystem($this->Entity->entityData['title'])
+        );
+        if (in_array($folderName, $this->foldersUsedSoFar, true)) {
+            // add part of elabid
+            $folderName .= ' - ' . substr(explode('-', $this->Entity->entityData['elabid'])[1], 0, 8);
+        }
+        $this->foldersUsedSoFar[] = $folderName;
+
+        return $folderName;
     }
 
     /**
@@ -46,9 +60,6 @@ abstract class AbstractMakeZip extends AbstractMake
     {
         $real_names_so_far = array();
         $i = 0;
-        $Config = Config::getConfig();
-        $storage = (int) $Config->configArr['uploads_storage'];
-        $storageFs = (new StorageFactory($storage))->getStorage()->getFs();
         foreach ($filesArr as $file) {
             $i++;
             $realName = $file['real_name'];
@@ -59,6 +70,7 @@ abstract class AbstractMakeZip extends AbstractMake
             $real_names_so_far[] = $realName;
 
             // add files to archive
+            $storageFs = (new StorageFactory((int) $file['storage']))->getStorage()->getFs();
             $this->Zip->addFileFromStream($this->folder . '/' . $realName, $storageFs->readStream($file['long_name']));
         }
     }
@@ -75,6 +87,8 @@ abstract class AbstractMakeZip extends AbstractMake
             (bool) $userData['pdfa'],
         );
         $MakePdf = new MakePdf($MpdfProvider, $this->Entity);
+        // disable makepdf notifications because they are handled by calling class
+        $MakePdf->createNotifications = false;
         $this->Zip->addFile($this->folder . '/' . $MakePdf->getFileName(), $MakePdf->getFileContent());
     }
 }

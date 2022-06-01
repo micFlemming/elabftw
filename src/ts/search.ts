@@ -6,6 +6,7 @@
  * @package elabftw
  */
 declare let key: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+import { SearchSyntaxHighlighting } from './SearchSyntaxHighlighting.class';
 
 document.addEventListener('DOMContentLoaded', () => {
   if (window.location.pathname !== '/search.php') {
@@ -14,8 +15,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // scroll to anchor if there is a search
   const params = new URLSearchParams(document.location.search.slice(1));
   if (params.has('type')) {
-    window.location.hash = '#anchor';
+    document.getElementById('anchor').scrollIntoView();
   }
+
+  const extendedArea = document.getElementById('extendedArea') as HTMLTextAreaElement;
+
+  SearchSyntaxHighlighting.init(extendedArea);
 
   if ((document.getElementById('searchin') as HTMLSelectElement).value === 'database') {
     document.getElementById('searchStatus').toggleAttribute('hidden', true);
@@ -38,8 +43,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  const extendedArea = (document.getElementById('extendedArea') as HTMLTextAreaElement);
-
   // Submit form with ctrl+enter from within textarea
   extendedArea.addEventListener('keydown', event => {
     if ((event.keyCode == 10 || event.keyCode == 13) && (event.ctrlKey || event.metaKey)) {
@@ -47,14 +50,36 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Main click event listener
+  document.getElementById('container').addEventListener('click', event => {
+    const el = (event.target as HTMLElement);
+    // Add a new key/value inputs block on top of the + button in metadata search block
+    if (el.matches('[data-action="add-extra-fields-search-inputs"]')) {
+      // the first set of inputs is cloned
+      const row = (document.getElementById('metadataFirstInputs').cloneNode(true) as HTMLElement);
+      // remove id 'metadataFirstInputs'
+      row.removeAttribute('id');
+      // give new ids to the labels/inputs
+      row.querySelectorAll('label').forEach(l => {
+        const id = crypto.randomUUID();
+        l.setAttribute('for', id);
+        const input = l.nextElementSibling as HTMLInputElement;
+        input.setAttribute('id', id);
+        input.value = '';
+      });
+      // add inputs block
+      el.parentNode.insertBefore(row, el);
+    }
+  });
+
   function getOperator(): string {
-    const operatorSelect = document.getElementById('dateOperator') as HTMLSelectElement;
-    return operatorSelect.value;
+    return (document.getElementById('dateOperator') as HTMLSelectElement).value;
   }
 
   // a filter helper can be a select or an input (for date), so we need a function to get its value
   function getFilterValueFromElement(element: HTMLElement): string {
     if (element instanceof HTMLSelectElement) {
+      // clear action
       if (element.options[element.selectedIndex].dataset.action === 'clear') {
         return '';
       }
@@ -69,7 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return date + '..' + dateTo;
       }
-      return `${element.options[element.selectedIndex].innerText}`;
+      return `${element.options[element.selectedIndex].value}`;
     }
     if (element instanceof HTMLInputElement) {
       if (element.id === 'date') {
@@ -112,7 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const found = curVal.match(regex);
       // don't add quotes unless we need them (space exists)
       let quotes = '';
-      const filterValue = getFilterValueFromElement(elem);
+      let filterValue = getFilterValueFromElement(elem);
       if (filterValue.includes(' ')) {
         quotes = '"';
       }
@@ -120,7 +145,14 @@ document.addEventListener('DOMContentLoaded', () => {
       let filter = '';
       // but if we have a correct value, we add the filter
       if (filterValue !== '') {
-        filter = `${elem.dataset.filter}:${quotes}${filterValue}${quotes}`;
+        let filterName = elem.dataset.filter;
+
+        if (filterName === '(?:author|group)') {
+          filterName = filterValue.split(':')[0];
+          filterValue = filterValue.substring(filterName.length + 1);
+        }
+
+        filter = `${filterName}:${quotes}${filterValue}${quotes}`;
       }
 
       // add additional filter at cursor position
@@ -133,6 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const hasSpaceAfter = val.substring(pos, pos + 1) === ' ';
         const insert = (hasSpaceBefore ? '' : pos === 0 ? '' : ' ') + filter + (hasSpaceAfter ? '' : ' ');
         extendedArea.value = start + insert + end;
+        SearchSyntaxHighlighting.update(extendedArea.value);
         return;
       }
 
@@ -141,6 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         extendedArea.value = extendedArea.value + addSpace + filter;
       }
+      SearchSyntaxHighlighting.update(extendedArea.value);
     });
   });
 });

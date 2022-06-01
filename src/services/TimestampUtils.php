@@ -13,6 +13,7 @@ use Elabftw\Elabftw\App;
 use Elabftw\Elabftw\FsTools;
 use Elabftw\Exceptions\ImproperActionException;
 use Elabftw\Interfaces\TimestampResponseInterface;
+use Elabftw\Models\Config;
 use Elabftw\Traits\ProcessTrait;
 use Elabftw\Traits\UploadTrait;
 use GuzzleHttp\ClientInterface;
@@ -123,7 +124,7 @@ class TimestampUtils
                 'Content-Transfer-Encoding' => 'base64',
             ),
             // add proxy if there is one
-            'proxy' => $this->tsConfig['proxy'] ?? '',
+            'proxy' => Config::getConfig()->configArr['proxy'] ?? '',
             // add a timeout, because if you need proxy, but don't have it, it will mess up things
             // in seconds
             'timeout' => 5,
@@ -155,6 +156,8 @@ class TimestampUtils
             'openssl',
             'ts',
             '-verify',
+            // skip cert validity check
+            '-no_check_time',
             '-data',
             $this->dataPath,
             '-in',

@@ -13,8 +13,8 @@ import 'jsoneditor/dist/jsoneditor.min.css';
 
 // JSON editor related stuff
 document.addEventListener('DOMContentLoaded', () => {
-  // only run if the main json editor container exists on the page
-  if (document.getElementById('jsonEditorContainer')) {
+  // only run if there is the json-editor block
+  if (document.getElementById('json-editor')) {
 
     // fix the keymaster shortcut library interfering with the editor
     key.filter = (event): boolean => {
@@ -43,14 +43,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const el = (event.target as HTMLElement);
       if (el.matches('[data-action="json-load-metadata"]')) {
         JsonEditorHelperC.loadMetadata();
-      } else if (el.matches('[data-action="json-load-metadata-from-id"]')) {
-        const entityWithId = {
-          type: entity.type,
-          id: parseInt(el.dataset.id, 10),
-        };
-        JsonEditorHelperC.loadMetadataFromId(entityWithId);
-        // add the id of the currently edited item on the save button
-        document.getElementById('templateJsonSave').dataset.id = el.dataset.id;
       } else if (el.matches('[data-action="json-load-file"]')) {
         JsonEditorHelperC.loadFile(el.dataset.link, el.dataset.name, el.dataset.uploadid);
       } else if (el.matches('[data-action="json-save-metadata"]')) {

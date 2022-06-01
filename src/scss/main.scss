@@ -41,8 +41,8 @@ $text-muted: $lightgray;
 @import 'jquery-rating';
 @import 'jsoneditor';
 @import 'ove';
-@import 'tagcloud';
 @import 'todolist';
+@import 'search-syntax-highlighting';
 
 /* Font is Lato */
 @font-face {
@@ -81,8 +81,11 @@ body::before {
 .real-container {
     margin: auto;
     margin-top: 20px;
-    max-width: 1636px;
     padding: 0 5%;
+    /* reduce padding for small screen sizes */
+    @media (max-width: 992px) {
+        padding: 1%;
+    }
 }
 
 /* LINKS */
@@ -188,18 +191,24 @@ blockquote::before {
 }
 
 /* TITLES */
-h1,
+h1 {
+    color: $maingray;
+    font-size: 200%;
+    font-weight: normal;
+    margin-top: 0;
+}
+
 h2 {
     color: $maingray;
-    font-size: 30px;
+    font-size: 180%;
     font-weight: normal;
     margin-top: 0;
 }
 
 h3 {
     color: $maingray;
-    font-size: 150%;
-    margin: 0 auto 10px;
+    font-size: 160%;
+    margin: 0 auto;
 }
 
 h4 {
@@ -281,6 +290,12 @@ label {
     color: $darkred;
     transition-duration: 500ms;
 }
+
+.hover-action:hover {
+    color: $elabblue;
+    transition: color 0.8s ease;
+}
+
 
 .alert-danger .close {
     color: #e6614c;
@@ -406,12 +421,6 @@ label {
 
 button:disabled {
     cursor: not-allowed;
-}
-
-/* make the +/- button rounder */
-/* stylelint-disable-next-line selector-class-pattern */
-.plusMinusButton {
-    font-size: 110%;
 }
 
 .separator {
@@ -841,15 +850,8 @@ the form-control fails to do that so we do the border ourselves */
     }
 }
 
-.title-view {
-    font-size: 160%;
+.overflow-break-word {
     overflow-wrap: break-word;
-}
-
-.title-view[data-action='edit']:hover {
-    color: $elabblue;
-    cursor: pointer;
-    transition: color 0.8s ease;
 }
 
 .item-date {
@@ -890,6 +892,10 @@ the form-control fails to do that so we do the border ourselves */
     color: $maingray;
     overflow-wrap: break-word;
     text-align: right;
+}
+
+.thumbnail {
+    overflow-wrap: break-word;
 }
 
 /* TAGS */
@@ -1076,7 +1082,7 @@ the form-control fails to do that so we do the border ourselves */
 }
 
 .clickable:hover,
-[data-action='toggle-next'] {
+[data-action] {
     cursor: pointer;
 }
 
@@ -1099,6 +1105,10 @@ the form-control fails to do that so we do the border ourselves */
     &.active {
         color: $elabblue;
     }
+}
+
+[data-icon='bell'].active {
+    color: $elabblue;
 }
 
 /* for icons such as pin */
@@ -1148,11 +1158,6 @@ input[type='color'] {
     padding: 5px;
 }
 
-.user-badge:hover {
-    border-color: $elabblue;
-    transition-duration: 500ms;
-}
-
 .color-white {
     color: #fff;
 }
@@ -1172,7 +1177,6 @@ input[type='color'] {
     @media (min-width: 992px) {
         height: 43px;
     }
-    margin-right: 120px !important;
 }
 
 /* pure css pie chart based on: https://codepen.io/chriscoyier/pen/RPLqMg */

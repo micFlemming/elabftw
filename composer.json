@@ -19,7 +19,7 @@
     "ext-pdo": "*",
     "ext-zip": "*",
     "defuse/php-encryption": "2.3.*",
-    "mpdf/mpdf": "8.0.*",
+    "mpdf/mpdf": "^8.1.0",
     "onelogin/php-saml": "^4.0.0",
     "guzzlehttp/guzzle": "^7.0.1",
     "symfony/http-foundation": "^6.0",
@@ -35,7 +35,7 @@
     "symfony/mime": "^6.0",
     "robthree/twofactorauth": "^1.7.0",
     "directorytree/ldaprecord": "^2.0.3",
-    "league/flysystem": "^2.0",
+    "league/flysystem": "^3.0",
     "league/flysystem-memory": "^3.0",
     "lcobucci/jwt": "^4.1",
     "ezyang/htmlpurifier": "^4.13",
@@ -44,6 +44,7 @@
     "aws/aws-sdk-php": "^3.209",
     "league/flysystem-aws-s3-v3": "^3.0",
     "jblond/twig-trans": "^1.0",
+    "twig/intl-extra":"^3.3",
     "easyrdf/easyrdf": "*",
     "ml/json-ld": "*"
   },
@@ -107,5 +108,10 @@
       ]
     }
   },
-  "license": "AGPL-3.0-or-later"
+  "license": "AGPL-3.0-or-later",
+  "config": {
+    "allow-plugins": {
+      "pyrech/composer-changelogs": true
+    }
+  }
 }

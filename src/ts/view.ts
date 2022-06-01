@@ -9,7 +9,7 @@ import i18next from 'i18next';
 import { InputType, Malle } from '@deltablot/malle';
 import { Metadata } from './Metadata.class';
 import { Ajax } from './Ajax.class';
-import { getEntity, relativeMoment } from './misc';
+import { getEntity, relativeMoment, reloadElement } from './misc';
 import { BoundEvent, Payload, Method, Action, Target } from './interfaces';
 import { DateTime } from 'luxon';
 import EntityClass from './Entity.class';
@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // add the title in the page name (see #324)
-  document.title = document.querySelector('.title-view').textContent + ' - eLabFTW';
+  document.title = document.getElementById('documentTitle').textContent + ' - eLabFTW';
 
   const entity = getEntity();
   const EntityC = new EntityClass(entity.type);
@@ -115,7 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // TOGGLE PINNED
     } else if (el.matches('[data-action="pin"]')) {
-      AjaxC.post('togglePin').then(() => el.querySelector('svg').classList.toggle('grayed-out'));
+      EntityC.pin(entity.id).then(() => el.querySelector('svg').classList.toggle('grayed-out'));
 
     // TIMESTAMP button in modal
     } else if (el.matches('[data-action="timestamp"]')) {
@@ -149,12 +149,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // CREATE COMMENT
     if (el.matches('[data-action="create-comment"]')) {
       const content = (document.getElementById('commentsCreateArea') as HTMLTextAreaElement).value;
-      CommentC.create(content).then(() => $('#commentsDiv').load(window.location.href + ' #comment'));
+      CommentC.create(content).then(() => reloadElement('commentsDiv'));
 
     // DESTROY COMMENT
     } else if (el.matches('[data-action="destroy-comment"]')) {
       if (confirm(i18next.t('generic-delete-warning'))) {
-        CommentC.destroy(parseInt(el.dataset.target, 10)).then(() => $('#commentsDiv').load(window.location.href + ' #comment'));
+        CommentC.destroy(parseInt(el.dataset.target, 10)).then(() => reloadElement('commentsDiv'));
       }
     }
   });
@@ -162,7 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // UPDATE MALLEABLE COMMENT
   const malleableComments = new Malle({
     cancel : i18next.t('cancel'),
-    cancelClasses: ['button', 'btn', 'btn-danger', 'mt-2'],
+    cancelClasses: ['button', 'btn', 'btn-danger', 'mt-2', 'ml-1'],
     inputClasses: ['form-control'],
     fun: (value, original) => {
       CommentC.update(parseInt(original.dataset.id, 10), value);

@@ -9,6 +9,7 @@
 
 namespace Elabftw\Models;
 
+use function array_filter;
 use Elabftw\Elabftw\CreateNotificationParams;
 use Elabftw\Elabftw\Db;
 use Elabftw\Exceptions\ImproperActionException;
@@ -140,8 +141,9 @@ class Users
         $userid = $this->Db->lastInsertId();
 
         // now add the user to the team
-        $Teams->addUserToTeams($userid, array_column($teams, 'id'));
-        if ($alertAdmin) {
+        $Users2Teams = new Users2Teams();
+        $Users2Teams->addUserToTeams($userid, array_column($teams, 'id'));
+        if ($alertAdmin && !$TeamsHelper->isFirstUserInTeam()) {
             $this->notifyAdmins($TeamsHelper->getAllAdminsUserid(), $userid, $validated);
         }
         if ($validated === 0) {
@@ -158,46 +160,57 @@ class Users
      */
     public function read(ContentParamsInterface $params): array
     {
-        $usersArr = $this->readFromQuery($params->getContent());
+        $usersArr = array_filter($this->readFromQuery($params->getContent()), function ($u) {
+            return ((int) $u['archived']) === 0;
+        });
         $res = array();
         foreach ($usersArr as $user) {
-            $res[] = $user['userid'] . ' - ' . $user['fullname'];
+            $res[] = $user['userid'] . ' - ' . $user['fullname'] . ' - ' . $user['email'];
         }
         return $res;
     }
 
     /**
-     * Search users based on query. It searches in email, firstname, lastname or team name
+     * Search users based on query. It searches in email, firstname, lastname
      *
      * @param string $query the searched term
-     * @param bool $teamFilter toggle between sysadmin/admin view
+     * @param int $teamId limit search to a given team or search all teams if 0
      */
-    public function readFromQuery(string $query, bool $teamFilter = false): array
+    public function readFromQuery(string $query, int $teamId = 0): array
     {
         $teamFilterSql = '';
-        if ($teamFilter) {
-            $teamFilterSql = 'AND users2teams.teams_id = :team';
+        if ($teamId > 0) {
+            $teamFilterSql = ' AND users2teams.teams_id = :team';
         }
 
-        // NOTE: previously, the ORDER BY started with the team, but that didn't work
-        // with the DISTINCT, so it was removed.
-        $sql = "SELECT DISTINCT users.userid,
+        // Assures to get every user only once
+        $tmpTable = ' (SELECT users_id, MIN(teams_id) AS teams_id
+            FROM users2teams
+            GROUP BY users_id) AS';
+        // unless we use a specific team
+        if ($teamId > 0) {
+            $tmpTable = '';
+        }
+
+        // NOTE: $tmpTable avoids the use of DISTINCT, so we are able to use ORDER BY with teams_id.
+        // Side effect: User is shown in team with lowest id
+        $sql = "SELECT users.userid,
             users.firstname, users.lastname, users.email, users.mfa_secret,
             users.validated, users.usergroup, users.archived, users.last_login,
             CONCAT(users.firstname, ' ', users.lastname) AS fullname,
             users.cellphone, users.phone, users.website, users.skype
             FROM users
-            CROSS JOIN users2teams ON (users2teams.users_id = users.userid " . $teamFilterSql . ')
+            CROSS JOIN" . $tmpTable . ' users2teams ON (users2teams.users_id = users.userid' . $teamFilterSql . ')
             WHERE (users.email LIKE :query OR users.firstname LIKE :query OR users.lastname LIKE :query)
-            ORDER BY users.usergroup ASC, users.lastname ASC';
+            ORDER BY users2teams.teams_id ASC, users.usergroup ASC, users.lastname ASC';
         $req = $this->Db->prepare($sql);
         $req->bindValue(':query', '%' . $query . '%');
-        if ($teamFilter) {
-            $req->bindValue(':team', $this->userData['team']);
+        if ($teamId > 0) {
+            $req->bindValue(':team', $teamId);
         }
         $this->Db->execute($req);
 
-        return $this->Db->fetchAll($req);
+        return $req->fetchAll();
     }
 
     /**
@@ -205,7 +218,7 @@ class Users
      */
     public function readAllFromTeam(): array
     {
-        return $this->readFromQuery('', true);
+        return $this->readFromQuery('', $this->userData['team']);
     }
 
     public function getLockedUsersCount(): int
@@ -274,14 +287,26 @@ class Users
     }
 
     /**
+     * Update the user's email
+     * Note: should only be done if auth method is local!
+     */
+    public function updateEmail(string $email): bool
+    {
+        $this->checkEmail($email);
+        $sql = 'UPDATE users SET email = :email WHERE userid = :userid';
+        $req = $this->Db->prepare($sql);
+        $req->bindParam(':email', $email, PDO::PARAM_STR);
+        $req->bindParam(':userid', $this->userData['userid'], PDO::PARAM_INT);
+        return $this->Db->execute($req);
+    }
+
+    /**
      * Update things from UCP
      *
      * @param array<string, mixed> $params
      */
     public function updateAccount(array $params): bool
     {
-        $this->checkEmail($params['email']);
-
         $params['firstname'] = Filter::sanitize($params['firstname']);
         $params['lastname'] = Filter::sanitize($params['lastname']);
 
@@ -296,7 +321,6 @@ class Users
         $params['website'] = filter_var($params['website'], FILTER_VALIDATE_URL);
 
         $sql = 'UPDATE users SET
-            email = :email,
             firstname = :firstname,
             lastname = :lastname,
             phone = :phone,
@@ -306,7 +330,6 @@ class Users
             WHERE userid = :userid';
         $req = $this->Db->prepare($sql);
 
-        $req->bindParam(':email', $params['email']);
         $req->bindParam(':firstname', $params['firstname']);
         $req->bindParam(':lastname', $params['lastname']);
         $req->bindParam(':phone', $params['phone']);
@@ -409,8 +432,8 @@ class Users
     public function destroy(): bool
     {
         $UsersHelper = new UsersHelper((int) $this->userData['userid']);
-        if ($UsersHelper->hasExperiments()) {
-            throw new ImproperActionException('Cannot delete a user that owns experiments!');
+        if ($UsersHelper->hasStuff()) {
+            throw new ImproperActionException('Cannot delete a user that owns experiments or items!');
         }
         $sql = 'DELETE FROM users WHERE userid = :userid';
         $req = $this->Db->prepare($sql);
@@ -449,7 +472,7 @@ class Users
     private function getUserData(int $userid): array
     {
         $sql = "SELECT users.*, CONCAT(users.firstname, ' ', users.lastname) AS fullname,
-            groups.can_lock, groups.is_admin, groups.is_sysadmin FROM users
+            groups.is_admin, groups.is_sysadmin FROM users
             LEFT JOIN `groups` ON groups.id = users.usergroup
             WHERE users.userid = :userid";
         $req = $this->Db->prepare($sql);

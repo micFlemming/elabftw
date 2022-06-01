@@ -75,10 +75,6 @@
     </a>
 
     {% if Entity.type == 'items' %}
-      <a class='elab-tooltip mr-1' href='experiments.php?mode=show&related={{ Entity.id }}'>
-        <span>{{ 'Show related'|trans }}</span>
-        <i title='{{ 'Show related'|trans }}' class='fas fa-link fa-2x'></i>
-      </a>
       {% if Entity.entityData.bookable %}
         <a class='elab-tooltip mr-1' href='team.php?item={{ Entity.id }}'>
           <span>{{ 'Book item'|trans }}</span>
@@ -108,7 +104,7 @@
     {% endif %}
 
     <!-- show timestamp button -->
-    {% if Entity.isTimestampable and Entity.type == 'experiments' and not App.Session.has('is_anon') %}
+    {% if Entity.type == 'experiments' and not App.Session.has('is_anon') %}
       <a href='#' class='elab-tooltip mr-1' data-action='toggle-modal' data-target='timestampModal'>
         <span>{{ 'Timestamp Experiment'|trans }}</span>
         <i title='{{ 'Timestamp Experiment'|trans }}' class='far fa-calendar-check fa-2x'></i>
@@ -116,7 +112,7 @@
     {% endif %}
 
     <!-- BLOXBERG BUTTON -->
-    {% if not Entity.isReadOnly %}
+    {% if not Entity.isReadOnly and App.Config.configArr.blox_enabled %}
       <a href='#' class='elab-tooltip mr-1' data-action='bloxberg'>
         <span>{{ 'Add to blockchain'|trans }}</span>
         <i title='{{ 'Add to blockchain'|trans }}' class='fas fa-cubes fa-2x'></i>
@@ -134,7 +130,7 @@
 
   <!-- build the tag array -->
   {% if Entity.entityData.tags|length > 0 %}
-    <span class='tags'>
+    <span class='tags mathjax-ignore'>
       <i class='fas fa-tags fa-2x'></i>
       {% set tagsIdArr = Entity.entityData.tags_id|split(',') %}
       {% set tagsValueArr = Entity.entityData.tags|split('|') %}
@@ -165,12 +161,13 @@
   </div>
 
   <!-- TITLE : click on it to go to edit mode only if we are not in read only mode -->
-  <h2 class='title-view' {{ not Entity.isReadOnly and not Entity.entityData.locked ? 'data-action="edit"' }}>
+  {% set isEditable = not Entity.isReadOnly and not Entity.entityData.locked %}
+  <h1 id='documentTitle' class='overflow-break-word {{ isEditable ? 'hover-action' }}' {{ isEditable ? 'data-action="edit"' }}>
       {% if Entity.type == 'items' %}
           <span style='color:#{{ Entity.entityData.color }}'>{{ Entity.entityData.category }}</span>
       {% endif %}
       {{ Entity.entityData.title|raw }}
-  </h2>
+  </h1>
 
   <!-- SHOW EVENTS -->
   {% if Entity.entityData.events_id and Entity.type == 'items' %}<i class='far fa-calendar-alt'></i>
@@ -206,8 +203,6 @@
 
   <div id='metadataDiv' class='col-md-6'></div>
 
-  {% include 'steps-links-view.html' %}
-
   <div class='row'>
     <div class='col-6'>
       <!-- SHOW LAST MOD -->
@@ -221,8 +216,9 @@
 
 </section>
 
-
 {% include 'uploads.html' %}
+
+{% include 'steps-links-view.html' %}
 
 <!-- only show the json editor if there is at least one file with a .json extension -->
 {% if uploadsArr|filter(u => u.real_name|getExt == 'json') %}

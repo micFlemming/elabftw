@@ -10,12 +10,39 @@
 
 namespace Elabftw\Services;
 
+use Elabftw\Elabftw\ContentParams;
+use Elabftw\Elabftw\TeamGroupParams;
 use Elabftw\Models\TeamGroups;
 use Elabftw\Models\Users;
 use Elabftw\Services\AdvancedSearchQuery\Visitors\VisitorParameters;
 
 class AdvancedSearchQueryTest extends \PHPUnit\Framework\TestCase
 {
+    private int $groupID;
+
+    private TeamGroups $TeamGroups;
+
+    private array $visibilityList;
+
+    private array $groups;
+
+    protected function setUp(): void
+    {
+        $this->TeamGroups = new TeamGroups(new Users(1, 1));
+        $this->groupID = $this->TeamGroups->create(new ContentParams('Group Name'));
+        $this->TeamGroups->id = $this->groupID;
+        $this->TeamGroups->update(new TeamGroupParams('', 'member', array('how' => 'add', 'group' => $this->groupID, 'userid' => 1)));
+
+        $this->visibilityList = $this->TeamGroups->getVisibilityList();
+        $this->groups = $this->TeamGroups->readGroupsWithUsersFromUser();
+    }
+
+    protected function tearDown(): void
+    {
+        $this->TeamGroups->update(new TeamGroupParams('', 'member', array('how' => 'rm', 'group' => $this->groupID, 'userid' => 1)));
+        $this->TeamGroups->destroy();
+    }
+
     public function testGetWhereClause(): void
     {
         $query = ' TEST TEST1 AND TEST2 OR TEST3 NOT TEST4 & TEST5';
@@ -24,12 +51,15 @@ class AdvancedSearchQueryTest extends \PHPUnit\Framework\TestCase
         $query .= ' attachment:0 author:"Phpunit TestUser" body:"some text goes here"';
         $query .= ' elabid:7bebdd3512dc6cbee0b1 locked:yes rating:5 rating:unrated';
         $query .= ' status:"only meaningful with experiments but no error"';
-        $query .= ' timestamped: timestamped:true title:"very cool experiment" visibility:me';
+        $query .= ' timestamped: timestamped:true title:"very cool experiment" visibility:%me';
         $query .= ' date:>2020.06,21 date:2020/06-21..20201231';
+        $query .= ' group:"Group Name"';
+        $query .= ' attachment:"hello world"';
 
         $advancedSearchQuery = new AdvancedSearchQuery($query, new VisitorParameters(
             'experiments',
-            (new TeamGroups(new Users(1, 1)))->getVisibilityList(),
+            $this->visibilityList,
+            $this->groups,
         ));
         $whereClause = $advancedSearchQuery->getWhereClause();
         $this->assertIsArray($whereClause);
@@ -39,7 +69,8 @@ class AdvancedSearchQueryTest extends \PHPUnit\Framework\TestCase
         $query = 'category:"only meaningful with items but no error"';
         $advancedSearchQuery = new AdvancedSearchQuery($query, new VisitorParameters(
             'items',
-            (new TeamGroups(new Users(1, 1)))->getVisibilityList(),
+            $this->visibilityList,
+            $this->groups,
         ));
         $whereClause = $advancedSearchQuery->getWhereClause();
         $this->assertStringStartsWith(' AND (categoryt.name LIKE :', $whereClause['where']);
@@ -52,7 +83,8 @@ class AdvancedSearchQueryTest extends \PHPUnit\Framework\TestCase
 
         $advancedSearchQuery = new AdvancedSearchQuery($query, new VisitorParameters(
             'experiments',
-            (new TeamGroups(new Users(1, 1)))->getVisibilityList(),
+            $this->visibilityList,
+            $this->groups,
         ));
         $advancedSearchQuery->getWhereClause();
         $this->assertStringStartsWith('Line 1, Column ', $advancedSearchQuery->getException());
@@ -65,7 +97,8 @@ class AdvancedSearchQueryTest extends \PHPUnit\Framework\TestCase
         // Depth of abstract syntax tree is set to 1 with the last parameter
         $advancedSearchQuery = new AdvancedSearchQuery($query, new VisitorParameters(
             'experiments',
-            (new TeamGroups(new Users(1, 1)))->getVisibilityList(),
+            $this->visibilityList,
+            $this->groups,
         ), 1);
         $advancedSearchQuery->getWhereClause();
         $this->assertEquals('Query is too complex!', $advancedSearchQuery->getException());
@@ -73,20 +106,23 @@ class AdvancedSearchQueryTest extends \PHPUnit\Framework\TestCase
 
     public function testFieldValidatorInvalidFields(): void
     {
-        $visInput = 'no-valid-input';
+        $visInput = 'noValidInput';
         $from = '20210101';
         $to = '20200101';
         $query = 'visibility:' . $visInput;
         $query .= ' date:' . $from . '..' . $to;
+        $query .= ' group:"does not exist"';
         $query .= ' category:"only works for items"';
 
         $advancedSearchQuery = new AdvancedSearchQuery($query, new VisitorParameters(
             'experiments',
-            (new TeamGroups(new Users(1, 1)))->getVisibilityList(),
+            $this->visibilityList,
+            $this->groups,
         ));
         $advancedSearchQuery->getWhereClause();
-        $this->assertStringStartsWith('visibility:<em>' . $visInput . '</em>. Valid values are ', $advancedSearchQuery->getException());
-        $this->assertStringContainsString('date:<em>' . $from . '..' . $to . '</em>. Second date needs to be equal or greater than first date.', $advancedSearchQuery->getException());
+        $this->assertStringStartsWith('visibility:' . $visInput . '. Valid values are ', $advancedSearchQuery->getException());
+        $this->assertStringContainsString('date:' . $from . '..' . $to . '. Second date needs to be equal or greater than first date.', $advancedSearchQuery->getException());
+        $this->assertStringContainsString('group:', $advancedSearchQuery->getException());
         $this->assertStringEndsWith('category: is only allowed when searching in database.', $advancedSearchQuery->getException());
 
         $query = 'timestamped:true';
@@ -94,7 +130,8 @@ class AdvancedSearchQueryTest extends \PHPUnit\Framework\TestCase
 
         $advancedSearchQuery = new AdvancedSearchQuery($query, new VisitorParameters(
             'itmes',
-            (new TeamGroups(new Users(1, 1)))->getVisibilityList(),
+            $this->visibilityList,
+            $this->groups,
         ));
         $advancedSearchQuery->getWhereClause();
         $this->assertStringStartsWith('timestamped: is only allowed when searching in experiments.', $advancedSearchQuery->getException());

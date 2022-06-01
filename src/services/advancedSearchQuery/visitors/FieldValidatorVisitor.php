@@ -39,7 +39,7 @@ class FieldValidatorVisitor implements Visitor
     {
         if ($dateField->getDateType() === 'range' && $dateField->getValue() > $dateField->getDateTo()) {
             $message = sprintf(
-                'date:<em>%s..%s</em>. Second date needs to be equal or greater than first date.',
+                'date:%s..%s. Second date needs to be equal or greater than first date.',
                 $dateField->getValue(),
                 $dateField->getDateTo(),
             );
@@ -54,7 +54,7 @@ class FieldValidatorVisitor implements Visitor
         // Call class methods dynamically to avoid many if statements.
         // This works here because the parser defines the list of fields.
         $method = 'visitField' . ucfirst($field->getFieldType());
-        return $this->$method($field->getValue(), $parameters);
+        return $this->$method($field->getValue(), $field->getAffix(), $parameters);
     }
 
     public function visitNotExpression(NotExpression $notExpression, VisitorParameters $parameters): InvalidFieldCollector
@@ -116,22 +116,22 @@ class FieldValidatorVisitor implements Visitor
         ));
     }
 
-    private function visitFieldAttachment(string $searchTerm, VisitorParameters $parameters): InvalidFieldCollector
+    private function visitFieldAttachment(string $searchTerm, string $affix, VisitorParameters $parameters): InvalidFieldCollector
     {
         return new InvalidFieldCollector();
     }
 
-    private function visitFieldAuthor(string $searchTerm, VisitorParameters $parameters): InvalidFieldCollector
+    private function visitFieldAuthor(string $searchTerm, string $affix, VisitorParameters $parameters): InvalidFieldCollector
     {
         return new InvalidFieldCollector();
     }
 
-    private function visitFieldBody(string $searchTerm, VisitorParameters $parameters): InvalidFieldCollector
+    private function visitFieldBody(string $searchTerm, string $affix, VisitorParameters $parameters): InvalidFieldCollector
     {
         return new InvalidFieldCollector();
     }
 
-    private function visitFieldCategory(string $searchTerm, VisitorParameters $parameters): InvalidFieldCollector
+    private function visitFieldCategory(string $searchTerm, string $affix, VisitorParameters $parameters): InvalidFieldCollector
     {
         if ($parameters->getEntityType() !== 'items') {
             return new InvalidFieldCollector(array('category: is only allowed when searching in database.'));
@@ -139,22 +139,37 @@ class FieldValidatorVisitor implements Visitor
         return new InvalidFieldCollector();
     }
 
-    private function visitFieldElabid(string $searchTerm, VisitorParameters $parameters): InvalidFieldCollector
+    private function visitFieldElabid(string $searchTerm, string $affix, VisitorParameters $parameters): InvalidFieldCollector
     {
         return new InvalidFieldCollector();
     }
 
-    private function visitFieldLocked(string $searchTerm, VisitorParameters $parameters): InvalidFieldCollector
+    private function visitFieldGroup(string $searchTerm, string $affix, VisitorParameters $parameters): InvalidFieldCollector
+    {
+        $teamGroups = $parameters->getTeamGroups();
+        $groupNames = array_column($teamGroups, 'name');
+        if (!in_array($searchTerm, $groupNames, true)) {
+            $message = sprintf(
+                'group:%s. Valid values are %s.',
+                $searchTerm,
+                implode(', ', $groupNames),
+            );
+            return new InvalidFieldCollector(array($message));
+        }
+        return new InvalidFieldCollector();
+    }
+
+    private function visitFieldLocked(string $searchTerm, string $affix, VisitorParameters $parameters): InvalidFieldCollector
     {
         return new InvalidFieldCollector();
     }
 
-    private function visitFieldRating(string $searchTerm, VisitorParameters $parameters): InvalidFieldCollector
+    private function visitFieldRating(string $searchTerm, string $affix, VisitorParameters $parameters): InvalidFieldCollector
     {
         return new InvalidFieldCollector();
     }
 
-    private function visitFieldStatus(string $searchTerm, VisitorParameters $parameters): InvalidFieldCollector
+    private function visitFieldStatus(string $searchTerm, string $affix, VisitorParameters $parameters): InvalidFieldCollector
     {
         if ($parameters->getEntityType() !== 'experiments') {
             return new InvalidFieldCollector(array('status: is only allowed when searching in experiments.'));
@@ -162,7 +177,7 @@ class FieldValidatorVisitor implements Visitor
         return new InvalidFieldCollector();
     }
 
-    private function visitFieldTimestamped(string $searchTerm, VisitorParameters $parameters): InvalidFieldCollector
+    private function visitFieldTimestamped(string $searchTerm, string $affix, VisitorParameters $parameters): InvalidFieldCollector
     {
         if ($parameters->getEntityType() !== 'experiments') {
             return new InvalidFieldCollector(array('timestamped: is only allowed when searching in experiments.'));
@@ -170,17 +185,17 @@ class FieldValidatorVisitor implements Visitor
         return new InvalidFieldCollector();
     }
 
-    private function visitFieldTitle(string $searchTerm, VisitorParameters $parameters): InvalidFieldCollector
+    private function visitFieldTitle(string $searchTerm, string $affix, VisitorParameters $parameters): InvalidFieldCollector
     {
         return new InvalidFieldCollector();
     }
 
-    private function visitFieldVisibility(string $searchTerm, VisitorParameters $parameters): InvalidFieldCollector
+    private function visitFieldVisibility(string $searchTerm, string $affix, VisitorParameters $parameters): InvalidFieldCollector
     {
         $visibilityFieldHelper = new VisibilityFieldHelper($searchTerm, $parameters->getVisArr());
         if (!$visibilityFieldHelper->getArr()) {
             $message = sprintf(
-                'visibility:<em>%s</em>. Valid values are %s.',
+                'visibility:%s. Valid values are %s.',
                 $searchTerm,
                 $visibilityFieldHelper->possibleInput,
             );

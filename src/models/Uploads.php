@@ -42,14 +42,14 @@ class Uploads implements CrudInterface
     use UploadTrait;
     use SetIdTrait;
 
+    public const STATE_DELETED = 3;
+
     /** @var int BIG_FILE_THRESHOLD size of a file in bytes above which we don't process it (50 Mb) */
     private const BIG_FILE_THRESHOLD = 50000000;
 
     private const STATE_NORMAL = 1;
 
     private const STATE_ARCHIVED = 2;
-
-    private const STATE_DELETED = 3;
 
     protected Db $Db;
 
@@ -188,7 +188,7 @@ class Uploads implements CrudInterface
         $req->bindParam(':type', $this->Entity->type);
         $this->Db->execute($req);
 
-        return $this->Db->fetchAll($req);
+        return $req->fetchAll();
     }
 
     public function readAllNormal(): array
@@ -242,6 +242,15 @@ class Uploads implements CrudInterface
         }
     }
 
+    public function getStorageFromLongname(string $longname): int
+    {
+        $sql = 'SELECT storage FROM uploads WHERE long_name = :long_name LIMIT 1';
+        $req = $this->Db->prepare($sql);
+        $req->bindParam(':long_name', $longname, PDO::PARAM_STR);
+        $this->Db->execute($req);
+        return (int) $req->fetchColumn();
+    }
+
     /**
      * This function will not remove the files but set them to "deleted" state
      * A manual purge must be made by sysadmin if they wish to really remove them.
@@ -257,9 +266,9 @@ class Uploads implements CrudInterface
      */
     private function replace(UploadedFile $file): bool
     {
-        // read the current one to get the real_name
+        // read the current one to get the comment
         $upload = $this->read(new ContentParams());
-        $params = new CreateUpload($upload['real_name'], $file->getPathname(), $upload['comment']);
+        $params = new CreateUpload($file->getClientOriginalName(), $file->getPathname(), $upload['comment']);
         $this->create($params);
 
         return $this->update(new UploadParams((string) self::STATE_ARCHIVED, 'state'));

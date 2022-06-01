@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * @author Nicolas CARPi <nico-git@deltablot.email>
  * @copyright 2012 Nicolas CARPi
@@ -6,7 +6,6 @@
  * @license AGPL-3.0
  * @package elabftw
  */
-declare(strict_types=1);
 
 namespace Elabftw\Elabftw;
 
@@ -23,15 +22,14 @@ use function sha1;
  *
  * How to modify the structure:
  * 1. add a file in src/sql/ named 'schemaXX.sql' where XX is the current schema version + 1
- * 2. this file should use transactions (see other files for examples)
- * 3. increment the REQUIRED_SCHEMA number
- * 4. Run `bin/console db:update`
- * 5. reflect the changes in src/sql/structure.sql (or models/Config.php for the config table)
+ * 2. increment the REQUIRED_SCHEMA number in this file
+ * 3. Run `bin/console db:update`
+ * 4. reflect the changes in src/sql/structure.sql (or models/Config.php for the config table)
  */
 class Update
 {
     /** @var int REQUIRED_SCHEMA the current version of the database structure */
-    private const REQUIRED_SCHEMA = 73;
+    private const REQUIRED_SCHEMA = 91;
 
     private Db $Db;
 
@@ -63,11 +61,13 @@ class Update
      */
     public function runUpdateScript(): array
     {
+        // at the end of the update, warnings can be displayed for important informations
         $warn = array();
 
-        // do nothing if we're up to date
-        if ($this->currentSchema === self::REQUIRED_SCHEMA) {
-            return $warn;
+        // make sure we run MySQL version 8 at least
+        $mysqlVersion = (int) substr($this->Db->getAttribute(PDO::ATTR_SERVER_VERSION) ?? '1', 0, 1);
+        if ($mysqlVersion < 8) {
+            throw new ImproperActionException('It looks like MySQL server version is less than 8. Update your MySQL server!');
         }
 
         // old style update functions have been removed, so add a block to prevent upgrade from very very old to newest directly
@@ -88,14 +88,7 @@ class Update
                 $this->addElabidToItems();
                 $this->fixExperimentsRevisions();
             }
-            // schema70: notifications cron needed
-            if ($this->currentSchema === 70) {
-                $warn[] = 'Change in the notification/email system: a cronjob is now REQUIRED for email notifications to be sent. Make sure to read the release notes!';
-            }
         }
-
-        // remove cached twig templates (for non docker users)
-        FsTools::deleteCache();
 
         return $warn;
     }

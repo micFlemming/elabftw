@@ -38,7 +38,7 @@
       <div class='modal-body'>
         <!-- CAN READ -->
         <div class='form-group'>
-        <i class='fas fa-eye' title='Visibility'></i>
+        <i class='fas fa-fw fa-eye' title='Visibility'></i>
         <label for='canread_select'>{{ 'Visibility'|trans }}</label>
         <select id='canread_select' class='permissionSelect form-control' data-rw='read'>
           {% for key, value in visibilityArr %}
@@ -48,7 +48,7 @@
           {% endfor %}
         </select>
         <!-- CAN WRITE -->
-        <i class='fas fa-pencil-alt' title='Can write'></i>
+        <i class='fas fa-fw fa-pencil-alt' title='Can write'></i>
         <label for='canwrite_select'>{{ 'Can write'|trans }}</label>
         <select id='canwrite_select' class='permissionSelect form-control' data-rw='write'>
           {% for key, value in visibilityArr %}
@@ -165,7 +165,7 @@
   <input id='title_input' class='form-control' type='text' name='title' value='{{ Entity.entityData.title|raw }}' required />
 
   <!-- TAGS -->
-  <div class='row mb-2'>
+  <div class='row mb-2 mathjax-ignore'>
     <div class='col'>
       <i class='fas fa-tags fa-fw mr-1'></i><label for='createTagInput'>{{ 'Tags'|trans }}</label>
       <div class='tags form-inline'>
@@ -175,7 +175,7 @@
             {% set tagsIdArr = Entity.entityData.tags_id|split(',') %}
             {% set tagsValueArr = Entity.entityData.tags|split('|') %}
             {% for tag in tagsValueArr -%}
-              <a class='tag mr-1 clickable hover-danger' data-action='unreference-tag' data-tagid='{{ tagsIdArr[loop.index0] }}'>{{ tag|raw }}</a>
+              <a class='tag mr-1 hover-danger' data-action='unreference-tag' data-tagid='{{ tagsIdArr[loop.index0] }}'>{{ tag|raw }}</a>
             {%- endfor -%}
           {% endif %}
         </div>
@@ -205,21 +205,18 @@
 
 <!-- UPLOAD FORM -->
 <section class='box'>
-  <i class='fas fa-paperclip mr-1 align-baseline'></i><h3 class='d-inline'>{{ 'Attach a file'|trans }}</h3>
+  <i class='fas fa-fw fa-paperclip mr-1 align-baseline'></i><h3 class='d-inline'>{{ 'Attach a file'|trans }}</h3>
   <form action='app/controllers/EntityAjaxController.php' class='dropzone' id='elabftw-dropzone'></form>
 </section>
 
 {% include 'uploads.html' %}
 
-{% if Entity.Users.userData.json_editor %}
-  {% include 'json-editor.html' %}
-{% endif %}
+{% include 'json-editor.html' %}
 
 <!-- DOODLE -->
-<section class='box' id='doodle-anchor'>
-  <i class='fas fa-paint-brush mr-1 align-baseline'></i><h3 class='d-inline'>{{ 'Draw something'|trans }}</h3>
-  <button class='button btn btn-primary plusMinusButton' data-toggle='collapse' data-target='#doodleDiv' aria-expanded='false' aria-controls='doodleDiv'>+</button>
-  <div id='doodleDiv' class='collapse mt-2'>
+<section class='box'>
+  <h3 data-action='toggle-next' data-icon='doodleDivIcon' class='d-inline'><i id='doodleDivIcon' class='fas fa-chevron-circle-down'></i> <i class='fas fa-fw fa-paint-brush'></i> {{ 'Draw something'|trans }}</h3>
+  <div id='doodleDiv' hidden class='mt-2' data-save-hidden='doodleDiv'>
     <div class='row'>
       <div>
         <canvas class='doodle' id='doodleCanvas' width='600' height='600'></canvas>
@@ -244,6 +241,7 @@
           <button id='clearCanvas' class='button btn btn-danger'>{{ 'Clear'|trans }}</button>
           <button id='saveCanvas' class='button btn btn-primary' data-type='{{ Entity.type }}' data-id='{{ Entity.id }}'>{{ 'Save'|trans }}</button>
         <p>
+        <p>{{ 'Use %sCtrl%s + click to add text'|trans|format('<kbd>', '</kbd>')|raw }}</p>
       </div>
     </div>
   </div>
@@ -252,9 +250,8 @@
 <!-- CHEM EDITOR -->
 {% if Entity.Users.userData.chem_editor %}
   <div class='box chemdoodle'>
-    <i class='fas fa-dna mr-1 align-baseline'></i><h3 class='d-inline'>{{ 'Molecule drawer'|trans }}</h3>
-    <button class='button btn btn-primary plusMinusButton' data-toggle='collapse' data-target='#chemDiv' aria-expanded='false' aria-controls='chemDiv'>+</button>
-    <div id='chemDiv' class='collapse mt-2 text-center'>
+    <h3 data-action='toggle-next' data-icon='chemDivIcon' class='d-inline'><i id='chemDivIcon' class='fas fa-chevron-circle-down'></i> <i class='fas fa-fw fa-dna'></i> {{ 'Molecule drawer'|trans }}</h3>
+    <div id='chemDiv' hidden data-save-hidden='chemDiv' class='mt-2 text-center'>
       <script src='assets/chemdoodle-canvas.bundle.js?v={{ v }}'></script>
     </div>
   </div>

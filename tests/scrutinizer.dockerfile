@@ -1,22 +1,20 @@
+# syntax=docker/dockerfile:1.3
 # Dockerfile for CI image
 FROM elabftw/elabimg:hypernext
 
 # Set versions of used tools
-ARG PHPSTAN_VERSION=1.4.2
-ARG PSALM_VERSION=4.18.1
-ARG PHAN_VERSION=5.3.1
+ARG PHPSTAN_VERSION=1.4.9
+ARG PSALM_VERSION=4.22.0
+ARG PHAN_VERSION=5.3.2
 
 # phpStan
-ADD https://github.com/phpstan/phpstan/releases/download/$PHPSTAN_VERSION/phpstan.phar /usr/bin/phpstan
-RUN chmod +x /usr/bin/phpstan
+ADD --chmod=755 https://github.com/phpstan/phpstan/releases/download/$PHPSTAN_VERSION/phpstan.phar /usr/bin/phpstan
 
 # Psalm
-ADD https://github.com/vimeo/psalm/releases/download/$PSALM_VERSION/psalm.phar /usr/bin/psalm
-RUN chmod +x /usr/bin/psalm
+ADD --chmod=755 https://github.com/vimeo/psalm/releases/download/$PSALM_VERSION/psalm.phar /usr/bin/psalm
 
 #Phan
-ADD https://github.com/phan/phan/releases/download/$PHAN_VERSION/phan.phar /usr/bin/phan
-RUN chmod +x /usr/bin/phan
+ADD --chmod=755 https://github.com/phan/phan/releases/download/$PHAN_VERSION/phan.phar /usr/bin/phan
 
 COPY ./bin /elabftw/bin
 COPY ./src /elabftw/src

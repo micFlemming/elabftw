@@ -211,20 +211,10 @@
         />
         <label for='chem_editor'>{{ 'Display the molecule editor in edit mode'|trans }}</label>
         <br>
-        <input id='json_editor' type='checkbox' name='json_editor'
-          {{ App.Users.userData.json_editor == '1' ? " checked='checked'" }}
-        />
-        <label for='json_editor'>{{ 'Display the JSON editor in edit mode'|trans }}</label>
-        <br>
         <input id='use_markdown' type='checkbox' name='use_markdown'
           {{ App.Users.userData.use_markdown == '1' ? " checked='checked'" }}
         />
         <label for='use_markdown'>{{ 'Disable the rich text editor and write Markdown directly'|trans }}</label>
-        <br>
-        <input id='use_ove' type='checkbox' name='use_ove'
-          {{ App.Users.userData.use_ove == '1' ? " checked='checked'" }}
-        />
-        <label for='use_ove'>{{ 'Enable the plasmid viewer'|trans }}</label>
         <br>
         <input id='use_isodate' type='checkbox' name='use_isodate'
           {{ App.Users.userData.use_isodate == '1' ? " checked='checked'" }}
@@ -263,32 +253,35 @@
 <div class='box' data-tabcontent='2' hidden>
     <form class='form-group' method='post' action='app/controllers/UcpController.php'>
       {{ App.Session.get('csrf')|csrf }}
-      <div class='row'>
-        <div class='col-md-6'>
-          <h4>{{ 'Modify your personal informations'|trans }}</h4>
-          <label for='currpass'>{{ 'Enter your password to edit your profile.'|trans }}</label>
-          <div class='input-group'>
-            <input class='form-control' id='currpass' name='currpass' type='password' autocomplete='current-password' pattern='.{8,}' required />
-            <div class='input-group-append'>
-              <span class='btn btn-light input-border' tabindex='-1' data-action='toggle-password' data-target='currpass'><i class='fas fa-eye' aria-hidden='true'></i></span>
+      {# only show the email/password fields for locally authenticated users #}
+      {% if App.Users.userData.auth_service == constant('Elabftw\\Controllers\\LoginController::AUTH_LOCAL') %}
+        <div class='row'>
+          <div class='col-md-6'>
+            <h4>{{ 'Modify your personal informations'|trans }}</h4>
+              <label for='currpass'>{{ 'Enter your password to edit your profile.'|trans }}</label>
+              <div class='input-group'>
+                <input class='form-control' id='currpass' name='currpass' type='password' autocomplete='current-password' pattern='.{8,}' required />
+                <div class='input-group-append'>
+                  <span class='btn btn-light input-border' tabindex='-1' data-action='toggle-password' data-target='currpass'><i class='fas fa-eye' aria-hidden='true'></i></span>
+                </div>
+              </div>
+            <label for='email'>{{ 'Email'|trans }}</label>
+            <input class='form-control' name='email' id='email' type='email' value='{{ App.Users.userData.email }}' />
+          </div>
+          <div class='col-md-6'>
+            <h4>{{ 'Modify your password'|trans }}</h4>
+            <label for='newpass'>{{ 'New password'|trans }}</label>
+            <div class='input-group'>
+              <input class='form-control' id='newpass' autocomplete='new-password' name='newpass' type='password' pattern='.{8,}' autocomplete='new-password' />
+              <div class='input-group-append'>
+                <span class='btn btn-light input-border' tabindex='-1' data-action='toggle-password' data-target='newpass'><i class='fas fa-eye' aria-hidden='true'></i></span>
+              </div>
             </div>
           </div>
-          <label for='email'>{{ 'Email'|trans }}</label>
-          <input class='form-control' name='email' id='email' type='email' value='{{ App.Users.userData.email }}' />
         </div>
-        <div class='col-md-6'>
-          <h4>{{ 'Modify your password'|trans }}</h4>
-          <label for='newpass'>{{ 'New password'|trans }}</label>
-          <div class='input-group'>
-            <input class='form-control' id='newpass' autocomplete='new-password' name='newpass' type='password' pattern='.{8,}' autocomplete='new-password' />
-            <div class='input-group-append'>
-              <span class='btn btn-light input-border' tabindex='-1' data-action='toggle-password' data-target='newpass'><i class='fas fa-eye' aria-hidden='true'></i></span>
-            </div>
-          </div>
-        </div>
-      </div>
-
         <hr><br>
+      {% endif %}
+
         <h4>{{ 'Two Factor Authentication'|trans }}</h4>
         <div class='row'>
           <div class='col-md-6'>
@@ -383,7 +376,7 @@
           <td>{{ key.name }}</td>
           <td>{{ key.can_write ? 'Read/Write'|trans : 'Read Only'|trans }}</td>
           <td>{{ key.created_at }}</td>
-          <td><a class='clickable' data-action='destroy-apikey' title='{{ 'Delete'|trans }}' data-apikeyid='{{ key.id }}'><i class='fas fa-trash-alt fa-2x'></i></a></td>
+          <td><a data-action='destroy-apikey' title='{{ 'Delete'|trans }}' data-apikeyid='{{ key.id }}'><i class='fas fa-trash-alt fa-2x'></i></a></td>
         </tr>
       {% endfor %}
     </tbody>
@@ -397,17 +390,19 @@
     <tr>
       <th>{{ 'Notification category'|trans }}</th>
       <th>{{ 'Web'|trans }}</th>
-      <th>{{' Email'|trans }}</th>
+      <th>{{'Email'|trans }}</th>
     </tr>
-    <tr>
-      <td>{{ 'New comment notification'|trans }}</td>
-      <td>
-        <input type='checkbox' data-trigger='change' data-model='user' data-target='notif_new_comment' {{ App.Users.userData.notif_new_comment == '1' ? " checked='checked'" }} />
-      </td>
-      <td>
-        <input type='checkbox' data-trigger='change' data-model='user' data-target='notif_new_comment_email' {{ App.Users.userData.notif_new_comment_email == '1' ? " checked='checked'" }}/>
-      </td>
-    </tr>
+    {% for notif in notificationsSettings %}
+      <tr>
+        <td>{{ notif.designation }}</td>
+        <td>
+          <input type='checkbox' data-trigger='change' data-model='user' data-target='{{ notif.setting }}' {{ App.Users.userData[notif.setting] == '1' ? " checked='checked'" }} />
+        </td>
+        <td>
+          <input type='checkbox' data-trigger='change' data-model='user' data-target='{{ notif.setting }}_email' {{ App.Users.userData[notif.setting ~ '_email'] == '1' ? " checked='checked'" }}/>
+        </td>
+      </tr>
+    {% endfor %}
   </table>
 </div>
 <!-- END PAGE -->

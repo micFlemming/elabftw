@@ -16,7 +16,7 @@
             <!-- TITLE -->
             <td class='title'>
               <!-- checkbox -->
-              <input autocomplete='off' type='checkbox' data-id='{{ item.id }}' data-randomid='{{ randomId }}' data-type='{{ Entity.type }}' aria-label='Select' style='width:15px;' />
+              <input autocomplete='off' type='checkbox' data-action='checkbox-entity' data-id='{{ item.id }}' data-randomid='{{ randomId }}' data-type='{{ Entity.type }}' aria-label='Select' style='width:15px;' />
               <!-- lock icon -->
               {% if item.locked %}
                 <i class='fas fa-lock fa-sm' style='color:#29AEB9'></i>
@@ -40,7 +40,7 @@
             </td>
 
             <!-- TAGS -->
-            <td class='tags'>
+            <td class='tags mathjax-ignore'>
             {% set itemtagsArr = tagsArr[item.id] %}
               {% if itemtagsArr|length > 0 %}
                 <span class='tags'>
@@ -58,7 +58,7 @@
                 <a href='{{ Entity.page }}.php?mode=edit&id={{ item.id }}'><i class='fas fa-pencil-alt clickable link-like'></i></a>
               {% endif %}
               <!-- toggle body -->
-              <span data-type='{{ Entity.type }}' data-id='{{ item.id }}' data-randid={{ randomId }} data-action='toggle-body' class='clickable' title='{{ 'Toggle content'|trans }}'>
+              <span data-type='{{ Entity.type }}' data-id='{{ item.id }}' data-randid={{ randomId }} data-action='toggle-body' title='{{ 'Toggle content'|trans }}'>
                 <i class='fas fa-plus-circle link-like'></i>
               </span>
 

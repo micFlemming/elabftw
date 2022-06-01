@@ -1,16 +1,17 @@
--- phpMyAdmin SQL Dump
--- version 4.8.4
--- https://www.phpmyadmin.net/
+-- @author Nicolas CARPi <nico-git@deltablot.email>
+-- @copyright 2012 Nicolas CARPi
+-- @see https://www.elabftw.net Official website
+-- @license AGPL-3.0
+-- @package elabftw
+
 --
--- Host: localhost
--- Generation Time: Jan 02, 2019 at 04:20 PM
--- Server version: 10.1.37-MariaDB
--- PHP Version: 7.3.0
+-- MySQL structure for getting a working elabftw database.
+-- This file must be executed upon fresh installation.
+--
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
 SET time_zone = "+00:00";
-
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
@@ -36,7 +37,7 @@ CREATE TABLE `api_keys` (
   `userid` int(10) UNSIGNED NOT NULL,
   `team` int(10) UNSIGNED NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- Table structure for table `authfail`
@@ -48,7 +49,7 @@ CREATE TABLE `authfail` (
   `attempt_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `device_token` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `api_keys`:
@@ -68,7 +69,7 @@ CREATE TABLE `config` (
   `conf_name` varchar(255) NOT NULL,
   `conf_value` text,
   PRIMARY KEY (`conf_name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `config`:
@@ -106,12 +107,14 @@ CREATE TABLE `experiments` (
   `metadata` json NULL DEFAULT NULL,
   `state` int(10) UNSIGNED NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `experiments`:
 --   `userid`
 --       `users` -> `userid`
+--   `category`
+--       `status` -> `id`
 --
 
 -- --------------------------------------------------------
@@ -127,7 +130,7 @@ CREATE TABLE `experiments_comments` (
   `comment` text NOT NULL,
   `userid` int(10) UNSIGNED NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `experiments_comments`:
@@ -144,11 +147,10 @@ CREATE TABLE `experiments_comments` (
 --
 
 CREATE TABLE `experiments_links` (
-  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
   `item_id` int(10) UNSIGNED NOT NULL,
   `link_id` int(10) UNSIGNED NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+  PRIMARY KEY (`item_id`, `link_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `experiments_links`:
@@ -172,7 +174,7 @@ CREATE TABLE `experiments_revisions` (
   `userid` int(10) UNSIGNED NOT NULL,
   `metadata` json NULL DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `experiments_revisions`:
@@ -195,8 +197,10 @@ CREATE TABLE `experiments_steps` (
   `ordering` int(10) UNSIGNED DEFAULT NULL,
   `finished` tinyint(1) UNSIGNED NOT NULL DEFAULT '0',
   `finished_time` datetime DEFAULT NULL,
+  `deadline` datetime DEFAULT NULL,
+  `deadline_notif` tinyint(1) UNSIGNED NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `experiments_steps`:
@@ -228,12 +232,14 @@ CREATE TABLE `experiments_templates` (
   `metadata` json NULL DEFAULT NULL,
   `state` int(10) UNSIGNED NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `experiments_templates`:
 --   `team`
 --       `teams` -> `id`
+--   `userid`
+--       `users` -> `userid`
 --
 
 -- --------------------------------------------------------
@@ -249,7 +255,7 @@ CREATE TABLE `experiments_templates_revisions` (
   `savedate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `userid` int(10) UNSIGNED NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `experiments_templates_revisions`:
@@ -266,24 +272,22 @@ CREATE TABLE `experiments_templates_revisions` (
 --
 
 CREATE TABLE `favtags2users` (
-  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
   `users_id` int UNSIGNED NOT NULL,
   `tags_id` int UNSIGNED NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  PRIMARY KEY (`users_id`, `tags_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- Table structure for table `groups`
 --
 
 CREATE TABLE `groups` (
-  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `id` tinyint(1) UNSIGNED NOT NULL AUTO_INCREMENT,
   `name` varchar(255) NOT NULL,
   `is_sysadmin` tinyint(1) UNSIGNED NOT NULL,
   `is_admin` tinyint(1) UNSIGNED NOT NULL,
-  `can_lock` tinyint(1) UNSIGNED NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `groups`:
@@ -293,11 +297,10 @@ CREATE TABLE `groups` (
 -- Dumping data for table `groups`
 --
 
-INSERT INTO `groups` (`id`, `name`, `is_sysadmin`, `is_admin`, `can_lock`) VALUES
-(1, 'Sysadmins', 1, '1', '0'),
-(2, 'Admins', 0, '1', '0'),
-(3, 'Chiefs', 0, '1', '1'),
-(4, 'Users', 0, '0', '0');
+INSERT INTO `groups` (`id`, `name`, `is_sysadmin`, `is_admin`) VALUES
+(1, 'Sysadmins', 1, '1'),
+(2, 'Admins', 0, '1'),
+(4, 'Users', 0, '0');
 
 -- --------------------------------------------------------
 
@@ -314,13 +317,14 @@ CREATE TABLE `idps` (
   `slo_url` varchar(255) NOT NULL,
   `slo_binding` varchar(255) NOT NULL,
   `x509` text NOT NULL,
+  `x509_new` text NOT NULL,
   `active` tinyint(1) UNSIGNED NOT NULL DEFAULT '0',
   `email_attr` varchar(255) NOT NULL,
   `team_attr` varchar(255) NULL DEFAULT NULL,
   `fname_attr` varchar(255) NULL DEFAULT NULL,
   `lname_attr` varchar(255) NULL DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `idps`:
@@ -353,12 +357,16 @@ CREATE TABLE `items` (
   `metadata` json NULL DEFAULT NULL,
   `state` int(10) UNSIGNED NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `items`:
 --   `team`
 --       `teams` -> `id`
+--   `category`
+--       `items_types` -> `id`
+--   `userid`
+--       `users` -> `userid`
 --
 
 -- --------------------------------------------------------
@@ -374,7 +382,7 @@ CREATE TABLE `items_comments` (
   `comment` text NOT NULL,
   `userid` int(10) UNSIGNED NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `items_comments`:
@@ -397,7 +405,7 @@ CREATE TABLE `items_revisions` (
   `savedate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `userid` int(10) UNSIGNED NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `items_revisions`:
@@ -425,7 +433,7 @@ CREATE TABLE `items_types` (
   `metadata` json NULL DEFAULT NULL,
   `state` int(10) UNSIGNED NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `items_types`:
@@ -438,11 +446,10 @@ CREATE TABLE `items_types` (
 --
 
 CREATE TABLE `items_types_links` (
-  `id` int UNSIGNED NOT NULL AUTO_INCREMENT,
   `item_id` int UNSIGNED NOT NULL,
   `link_id` int UNSIGNED NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+  PRIMARY KEY (`item_id`, `link_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
 
@@ -457,8 +464,10 @@ CREATE TABLE `items_types_steps` (
   `ordering` int UNSIGNED DEFAULT NULL,
   `finished` tinyint(1) NOT NULL DEFAULT '0',
   `finished_time` datetime DEFAULT NULL,
+  `deadline` datetime DEFAULT NULL,
+  `deadline_notif` tinyint(1) UNSIGNED NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
 --
@@ -470,7 +479,7 @@ CREATE TABLE `lockout_devices` (
   `locked_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `device_token` varchar(255) NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- Table structure for table `notifications`
@@ -487,7 +496,7 @@ CREATE TABLE `notifications` (
   `is_ack` tinyint(1) NOT NULL DEFAULT '0',
   `body` json DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 
 --
@@ -500,7 +509,7 @@ CREATE TABLE `pin2users` (
   `entity_id` int(10) UNSIGNED NOT NULL,
   `type` varchar(255) NOT NULL,
   PRIMARY KEY (`id`)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- Table structure for table `status`
@@ -511,11 +520,10 @@ CREATE TABLE `status` (
   `team` int(10) UNSIGNED NOT NULL,
   `name` text NOT NULL,
   `color` varchar(6) NOT NULL,
-  `is_timestampable` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
   `is_default` tinyint(1) UNSIGNED DEFAULT NULL,
   `ordering` int(10) UNSIGNED DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `status`:
@@ -534,7 +542,7 @@ CREATE TABLE `tags` (
   `team` int(10) UNSIGNED NOT NULL,
   `tag` varchar(255) NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `tags`:
@@ -554,7 +562,7 @@ CREATE TABLE `tags2entity` (
   `tag_id` int(10) UNSIGNED NOT NULL,
   `item_type` varchar(255) NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `tags2entity`:
@@ -579,13 +587,6 @@ CREATE TABLE `teams` (
   `link_name` text NOT NULL,
   `link_href` text NOT NULL,
   `datetime` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `ts_authority` varchar(255) NOT NULL DEFAULT 'dfn',
-  `ts_login` varchar(255) NULL DEFAULT NULL,
-  `ts_password` varchar(255) NULL DEFAULT NULL,
-  `ts_url` varchar(255) NULL DEFAULT NULL,
-  `ts_cert` varchar(255) NULL DEFAULT NULL,
-  `ts_hash` varchar(10) NOT NULL DEFAULT 'sha256',
-  `ts_override` tinyint(1) UNSIGNED NOT NULL DEFAULT 0,
   `orgid` varchar(255) DEFAULT NULL,
   `public_db` tinyint(1) UNSIGNED NOT NULL DEFAULT 0,
   `force_canread` varchar(255) NOT NULL DEFAULT 'team',
@@ -594,7 +595,7 @@ CREATE TABLE `teams` (
   `do_force_canwrite` tinyint(1) UNSIGNED NOT NULL DEFAULT 0,
   `visible` tinyint(1) UNSIGNED NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `teams`:
@@ -617,7 +618,7 @@ CREATE TABLE `team_events` (
   `experiment` int(10) UNSIGNED DEFAULT NULL,
   `item_link` int(10) UNSIGNED DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `team_events`:
@@ -638,7 +639,7 @@ CREATE TABLE `team_groups` (
   `name` varchar(255) NOT NULL,
   `team` int(10) UNSIGNED NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `team_groups`:
@@ -659,7 +660,7 @@ CREATE TABLE `todolist` (
   `ordering` int(10) UNSIGNED DEFAULT NULL,
   `userid` int(10) UNSIGNED NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `todolist`:
@@ -688,7 +689,7 @@ CREATE TABLE `uploads` (
   `filesize` int(10) UNSIGNED NULL DEFAULT NULL,
   `state` int(10) UNSIGNED NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `uploads`:
@@ -706,7 +707,7 @@ CREATE TABLE `users` (
   `password` varchar(255) NULL DEFAULT NULL,
   `password_hash` varchar(255) NULL DEFAULT NULL,
   `mfa_secret` varchar(32) DEFAULT NULL,
-  `usergroup` int(10) UNSIGNED NOT NULL,
+  `usergroup` tinyint(1) UNSIGNED NOT NULL,
   `firstname` varchar(255) NOT NULL,
   `lastname` varchar(255) NOT NULL,
   `email` varchar(255) NOT NULL,
@@ -727,7 +728,6 @@ CREATE TABLE `users` (
   `use_isodate` tinyint(1) UNSIGNED NOT NULL DEFAULT '0',
   `uploads_layout` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
   `chem_editor` tinyint(1) UNSIGNED NOT NULL DEFAULT '0',
-  `json_editor` tinyint(1) UNSIGNED NOT NULL DEFAULT '0',
   `validated` tinyint(1) UNSIGNED NOT NULL DEFAULT '0',
   `lang` varchar(5) NOT NULL DEFAULT 'en_GB',
   `default_read` varchar(255) NULL DEFAULT 'team',
@@ -737,7 +737,6 @@ CREATE TABLE `users` (
   `orderby` varchar(255) NOT NULL DEFAULT 'date',
   `sort` varchar(255) NOT NULL DEFAULT 'desc',
   `use_markdown` tinyint(1) UNSIGNED NOT NULL DEFAULT '0',
-  `use_ove` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
   `inc_files_pdf` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
   `append_pdfs` tinyint(1) UNSIGNED NOT NULL DEFAULT '0',
   `archived` tinyint(1) UNSIGNED NOT NULL DEFAULT '0',
@@ -747,16 +746,25 @@ CREATE TABLE `users` (
   `display_mode` VARCHAR(2) NOT NULL DEFAULT 'it',
   `last_login` DATETIME NULL DEFAULT NULL,
   `allow_untrusted` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
-  `notif_new_comment` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
-  `notif_new_comment_email` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
+  `notif_comment_created` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
+  `notif_comment_created_email` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
+  `notif_user_created` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
+  `notif_user_created_email` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
+  `notif_user_need_validation` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
+  `notif_user_need_validation_email` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
+  `notif_step_deadline` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
+  `notif_step_deadline_email` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
+  `notif_event_deleted` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
+  `notif_event_deleted_email` tinyint(1) UNSIGNED NOT NULL DEFAULT '1',
   `auth_lock_time` datetime DEFAULT NULL,
+  `auth_service` tinyint(1) UNSIGNED NULL DEFAULT NULL,
   PRIMARY KEY (`userid`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 --
 -- RELATIONSHIPS FOR TABLE `users`:
---   `team`
---       `teams` -> `id`
+--   `usergroup`
+--       `groups` -> `id`
 --
 
 -- --------------------------------------------------------
@@ -766,11 +774,10 @@ CREATE TABLE `users` (
 --
 
 CREATE TABLE `users2team_groups` (
-  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
   `userid` int(10) UNSIGNED NOT NULL,
   `groupid` int(10) UNSIGNED NOT NULL,
-  PRIMARY KEY (`id`)
-);
+  PRIMARY KEY (`userid`, `groupid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 --
 -- RELATIONSHIPS FOR TABLE `users2team_groups`:
 --   `groupid`
@@ -780,11 +787,17 @@ CREATE TABLE `users2team_groups` (
 --
 
 CREATE TABLE `users2teams` (
-  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
   `users_id` int(10) UNSIGNED NOT NULL,
   `teams_id` int(10) UNSIGNED NOT NULL,
-  PRIMARY KEY (`id`)
-);
+  PRIMARY KEY (`users_id`, `teams_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+--
+-- RELATIONSHIPS FOR TABLE `users2teams`:
+--   `teams_id`
+--       `teams` -> `id`
+--   `users_id`
+--       `users` -> `userid`
+--
 
 --
 -- Indexes for dumped tables
@@ -801,7 +814,8 @@ ALTER TABLE `api_keys`
 --
 ALTER TABLE `experiments`
   ADD KEY `fk_experiments_users_userid` (`userid`),
-  ADD KEY `idx_experiments_state` (`state`);
+  ADD KEY `idx_experiments_state` (`state`),
+  ADD KEY `fk_experiments_status_id` (`category`);
 
 --
 -- Indexes for table `experiments_comments`
@@ -828,7 +842,8 @@ ALTER TABLE `experiments_steps`
 --
 ALTER TABLE `experiments_templates`
   ADD KEY `fk_experiments_templates_teams_id` (`team`),
-  ADD KEY `idx_experiments_templates_state` (`state`);
+  ADD KEY `idx_experiments_templates_state` (`state`),
+  ADD KEY `fk_experiments_templates_users_userid` (`userid`);
 
 --
 -- Indexes for table `favtags2users`
@@ -842,7 +857,9 @@ ALTER TABLE `favtags2users`
 --
 ALTER TABLE `items`
   ADD KEY `fk_items_teams_id` (`team`),
-  ADD KEY `idx_items_state` (`state`);
+  ADD KEY `idx_items_state` (`state`),
+  ADD KEY `fk_items_items_types_id` (`category`),
+  ADD KEY `fk_items_users_userid` (`userid`);
 
 --
 -- Indexes for table `items_comments`
@@ -863,7 +880,7 @@ ALTER TABLE `items_types`
 --
 ALTER TABLE `items_types_links`
   ADD KEY `fk_items_types_links_items_id` (`item_id`),
-  ADD KEY `fk_items_types_links_items_id2` (`link_id`);
+  ADD KEY `fk_items_types_links_items_types_id` (`link_id`);
 
 --
 -- Indexes for table `items_types_steps`
@@ -909,6 +926,12 @@ ALTER TABLE `todolist`
   ADD KEY `fk_todolist_users_userid` (`userid`);
 
 --
+-- Indexes for table `users`
+--
+ALTER TABLE `users`
+  ADD KEY `fk_users_groups_id` (`usergroup`);
+
+--
 -- Constraints for dumped tables
 --
 
@@ -923,7 +946,8 @@ ALTER TABLE `api_keys`
 -- Constraints for table `experiments`
 --
 ALTER TABLE `experiments`
-  ADD CONSTRAINT `fk_experiments_users_userid` FOREIGN KEY (`userid`) REFERENCES `users` (`userid`) ON DELETE CASCADE ON UPDATE CASCADE;
+  ADD CONSTRAINT `fk_experiments_users_userid` FOREIGN KEY (`userid`) REFERENCES `users` (`userid`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_experiments_status_id` FOREIGN KEY (`category`) REFERENCES `status` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `experiments_comments`
@@ -956,7 +980,8 @@ ALTER TABLE `experiments_steps`
 -- Constraints for table `experiments_templates`
 --
 ALTER TABLE `experiments_templates`
-  ADD CONSTRAINT `fk_experiments_templates_teams_id` FOREIGN KEY (`team`) REFERENCES `teams` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+  ADD CONSTRAINT `fk_experiments_templates_teams_id` FOREIGN KEY (`team`) REFERENCES `teams` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_experiments_templates_users_userid` FOREIGN KEY (`userid`) REFERENCES `users` (`userid`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `experiments_templates_revisions`
@@ -976,7 +1001,9 @@ ALTER TABLE `favtags2users`
 -- Constraints for table `items`
 --
 ALTER TABLE `items`
-  ADD CONSTRAINT `fk_items_teams_id` FOREIGN KEY (`team`) REFERENCES `teams` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+  ADD CONSTRAINT `fk_items_teams_id` FOREIGN KEY (`team`) REFERENCES `teams` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_items_items_types_id` FOREIGN KEY (`category`) REFERENCES `items_types` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_items_users_userid` FOREIGN KEY (`userid`) REFERENCES `users` (`userid`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `items_comments`
@@ -1056,10 +1083,13 @@ CREATE TABLE `items_steps` (
     `ordering` int(10) unsigned DEFAULT NULL,
     `finished` tinyint(1) UNSIGNED NOT NULL DEFAULT '0',
     `finished_time` datetime DEFAULT NULL,
+    `deadline` datetime DEFAULT NULL,
+    `deadline_notif` tinyint(1) UNSIGNED NOT NULL DEFAULT '0',
     PRIMARY KEY (`id`),
     KEY `fk_items_steps_items_id` (`item_id`),
     CONSTRAINT `fk_items_steps_items_id` FOREIGN KEY (`item_id`) REFERENCES `items` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+
 CREATE TABLE `experiments_templates_steps` (
     `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
     `item_id` int(10) unsigned NOT NULL,
@@ -1067,32 +1097,35 @@ CREATE TABLE `experiments_templates_steps` (
     `ordering` int(10) unsigned DEFAULT NULL,
     `finished` tinyint(1) UNSIGNED NOT NULL DEFAULT '0',
     `finished_time` datetime DEFAULT NULL,
+    `deadline` datetime DEFAULT NULL,
+    `deadline_notif` tinyint(1) UNSIGNED NOT NULL DEFAULT '0',
     PRIMARY KEY (`id`),
     KEY `fk_experiments_templates_steps_items_id` (`item_id`),
     CONSTRAINT `fk_experiments_templates_steps_items_id` FOREIGN KEY (`item_id`) REFERENCES `experiments_templates` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+
 CREATE TABLE `items_links` (
-    `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
     `item_id` int(10) unsigned NOT NULL,
     `link_id` int(10) unsigned NOT NULL,
-    PRIMARY KEY (`id`),
+    PRIMARY KEY (`item_id`, `link_id`),
     KEY `fk_items_links_items_id` (`item_id`),
     KEY `fk_items_links_items_id2` (`link_id`),
     CONSTRAINT `fk_items_links_items_id` FOREIGN KEY (`item_id`) REFERENCES `items` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT `fk_items_links_items_id2` FOREIGN KEY (`link_id`) REFERENCES `items` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+
 CREATE TABLE `experiments_templates_links` (
-    `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
     `item_id` int(10) unsigned NOT NULL,
     `link_id` int(10) unsigned NOT NULL,
-    PRIMARY KEY (`id`),
+    PRIMARY KEY (`item_id`, `link_id`),
     KEY `fk_experiments_templates_links_items_id` (`item_id`),
     KEY `fk_experiments_templates_links_items_id2` (`link_id`),
     CONSTRAINT `fk_experiments_templates_links_experiments_templates_id` FOREIGN KEY (`item_id`) REFERENCES `experiments_templates` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT `fk_experiments_templates_links_items_id` FOREIGN KEY (`link_id`) REFERENCES `items` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+
 --
--- Indexes for table `users2teams`
+-- Indexes and Constraints for table `users2teams`
 --
 ALTER TABLE `users2teams`
   ADD KEY `fk_users2teams_teams_id` (`teams_id`),
@@ -1101,6 +1134,15 @@ ALTER TABLE `users2teams`
   ADD CONSTRAINT `fk_users2teams_teams_id` FOREIGN KEY (`teams_id`) REFERENCES `teams` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   ADD CONSTRAINT `fk_users2teams_users_id` FOREIGN KEY (`users_id`) REFERENCES `users` (`userid`) ON DELETE CASCADE ON UPDATE CASCADE;
 
+--
+-- Indexes and Constraints for table `users2team_groups`
+--
+ALTER TABLE `users2team_groups`
+  ADD KEY `fk_users2team_groups_groupid` (`groupid`),
+  ADD KEY `fk_users2team_groups_userid` (`userid`);
+ALTER TABLE `users2team_groups`
+  ADD CONSTRAINT `fk_users2team_groups_groupid` FOREIGN KEY (`groupid`) REFERENCES `team_groups` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_users2team_groups_userid` FOREIGN KEY (`userid`) REFERENCES `users` (`userid`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Indexes for table `pin2users`
@@ -1113,6 +1155,12 @@ ALTER TABLE `pin2users`
 --
 ALTER TABLE `pin2users`
   ADD CONSTRAINT `fk_pin2users_userid` FOREIGN KEY (`users_id`) REFERENCES `users` (`userid`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Constraints for table `users`
+--
+ALTER TABLE `users`
+  ADD CONSTRAINT `fk_users_groups_id` FOREIGN KEY (`usergroup`) REFERENCES `groups` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 COMMIT;
 

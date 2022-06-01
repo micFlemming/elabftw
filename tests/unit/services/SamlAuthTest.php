@@ -40,6 +40,7 @@ class SamlAuthTest extends \PHPUnit\Framework\TestCase
         $this->SamlAuthLib->method('login')->willReturn(null);
         $this->SamlAuthLib->method('processResponse')->willReturn(null);
         $this->SamlAuthLib->method('getErrors')->willReturn(null);
+        $this->SamlAuthLib->method('getSessionIndex')->willReturn('abcdef');
         $this->SamlAuthLib->method('isAuthenticated')->willReturn(true);
 
         // create fake saml idp response
@@ -60,7 +61,6 @@ class SamlAuthTest extends \PHPUnit\Framework\TestCase
         $AuthService = new SamlAuth($this->SamlAuthLib, $this->configArr, $this->settings);
         $authResponse = $AuthService->tryAuth();
         $this->assertInstanceOf(AuthResponse::class, $authResponse);
-        $this->assertEquals('saml', $authResponse->isAuthBy);
     }
 
     public function testAssertIdpResponse(): void
@@ -69,7 +69,6 @@ class SamlAuthTest extends \PHPUnit\Framework\TestCase
         $AuthService = new SamlAuth($this->SamlAuthLib, $this->configArr, $this->settings);
         $authResponse = $AuthService->assertIdpResponse();
         $this->assertInstanceOf(AuthResponse::class, $authResponse);
-        $this->assertEquals('saml', $authResponse->isAuthBy);
         $this->assertEquals(1, $authResponse->userid);
         $this->assertFalse($authResponse->isAnonymous);
         $this->assertEquals(1, $authResponse->selectedTeam);
@@ -222,5 +221,37 @@ class SamlAuthTest extends \PHPUnit\Framework\TestCase
         $AuthService = new SamlAuth($this->SamlAuthLib, $configArr, $this->settings);
         $this->expectException(UnauthorizedException::class);
         $authResponse = $AuthService->assertIdpResponse();
+    }
+
+    public function testGetSessionIndex(): void
+    {
+        $AuthService = new SamlAuth($this->SamlAuthLib, $this->configArr, $this->settings);
+        $authResponse = $AuthService->assertIdpResponse();
+        $this->assertEquals('abcdef', $AuthService->getSessionIndex());
+    }
+
+    public function testEncodeDecodeToken(): void
+    {
+        $AuthService = new SamlAuth($this->SamlAuthLib, $this->configArr, $this->settings);
+        $authResponse = $AuthService->assertIdpResponse();
+
+        $token = $AuthService->encodeToken(1);
+        $this->assertIsString($token);
+
+        [$sid, $idpId] = SamlAuth::decodeToken($token);
+        $this->assertEquals('abcdef', $sid);
+        $this->assertEquals(1, $idpId);
+    }
+
+    public function testUndecodableToken(): void
+    {
+        $this->expectException(UnauthorizedException::class);
+        SamlAuth::decodeToken('..');
+    }
+
+    public function testNotParsableToken(): void
+    {
+        $this->expectException(UnauthorizedException::class);
+        SamlAuth::decodeToken('this can not be parsed');
     }
 }

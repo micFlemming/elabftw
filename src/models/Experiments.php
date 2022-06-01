@@ -101,18 +101,6 @@ class Experiments extends AbstractEntity
     }
 
     /**
-     * Can this experiment be timestamped?
-     */
-    public function isTimestampable(): bool
-    {
-        $sql = 'SELECT is_timestampable FROM status WHERE id = (SELECT category FROM experiments WHERE id = :id)';
-        $req = $this->Db->prepare($sql);
-        $req->bindParam(':id', $this->id, PDO::PARAM_INT);
-        $this->Db->execute($req);
-        return (bool) $req->fetchColumn();
-    }
-
-    /**
      * Set the experiment as timestamped with a path to the token
      *
      * @param string $responseTime the date of the timestamp
@@ -181,13 +169,25 @@ class Experiments extends AbstractEntity
         return parent::destroy() && $this->Pins->cleanup();
     }
 
+    /**
+     * Count the number of timestamped experiments during past month (sliding window)
+     */
+    public function getTimestampLastMonth(): int
+    {
+        $sql = 'SELECT COUNT(id) FROM experiments WHERE timestamped = 1 AND timestampedwhen > (NOW() - INTERVAL 1 MONTH)';
+        $req = $this->Db->prepare($sql);
+        $this->Db->execute($req);
+        return (int) $req->fetchColumn();
+    }
+
     protected function getBoundEvents(): array
     {
         $sql = 'SELECT team_events.* from team_events WHERE experiment = :id';
         $req = $this->Db->prepare($sql);
         $req->bindParam(':id', $this->id, PDO::PARAM_INT);
         $this->Db->execute($req);
-        return $this->Db->fetchAll($req);
+
+        return $req->fetchAll();
     }
 
     /**

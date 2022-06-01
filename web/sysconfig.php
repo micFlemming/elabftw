@@ -20,6 +20,7 @@ use Elabftw\Models\Teams;
 use Elabftw\Services\UsersHelper;
 use Exception;
 use function file_get_contents;
+use PDO;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -51,7 +52,10 @@ try {
     $usersArr = array();
     if ($Request->query->has('q')) {
         $isSearching = true;
-        $usersArr = $App->Users->readFromQuery(filter_var($Request->query->get('q'), FILTER_SANITIZE_STRING));
+        $usersArr = $App->Users->readFromQuery(
+            filter_var($Request->query->get('q'), FILTER_SANITIZE_STRING),
+            (int) filter_var($Request->query->get('teamFilter'), FILTER_SANITIZE_NUMBER_INT)
+        );
         foreach ($usersArr as &$user) {
             $UsersHelper = new UsersHelper((int) $user['userid']);
             $user['teams'] = $UsersHelper->getTeamsFromUserid();
@@ -67,6 +71,7 @@ try {
         PHP_SYSCONFDIR,
         ini_get('upload_max_filesize'),
         ini_get('date.timezone'),
+        Db::getConnection()->getAttribute(PDO::ATTR_SERVER_VERSION),
     );
 
     $elabimgVersion = getenv('ELABIMG_VERSION') ?: 'Not in Docker';
@@ -75,10 +80,10 @@ try {
 
     $template = 'sysconfig.html';
     $renderArr = array(
+        'Request' => $Request,
         'nologinUsersCount' => $App->Users->getLockedUsersCount(),
         'lockoutDevicesCount' => $AuthFail->getLockoutDevicesCount(),
         'elabimgVersion' => $elabimgVersion,
-        'fromSysconfig' => true,
         'idpsArr' => $idpsArr,
         'isSearching' => $isSearching,
         'langsArr' => $langsArr,

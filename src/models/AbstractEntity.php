@@ -30,6 +30,7 @@ use Elabftw\Services\Filter;
 use Elabftw\Services\Transform;
 use Elabftw\Traits\EntityTrait;
 use function explode;
+use function implode;
 use function is_bool;
 use PDO;
 use PDOStatement;
@@ -41,11 +42,11 @@ abstract class AbstractEntity implements CrudInterface
 {
     use EntityTrait;
 
-    protected const STATE_NORMAL = 1;
+    public const STATE_NORMAL = 1;
 
-    protected const STATE_ARCHIVED = 2;
+    public const STATE_ARCHIVED = 2;
 
-    protected const STATE_DELETED = 3;
+    public const STATE_DELETED = 3;
 
     public Comments $Comments;
 
@@ -85,19 +86,21 @@ abstract class AbstractEntity implements CrudInterface
     private string $extendedFilter = '';
 
     // inserted in sql
-    private array $bindExtendedValues = array();
+    private array $extendedValues = array();
 
-    private string $metadataFilter = '';
-
-    private string $metadataHaving = '';
-
+    // start metadata stuff
     private bool $isMetadataSearch = false;
 
-    private string $metadataKey = '';
+    private array $metadataFilter = array();
 
-    private string $metadataValuePath = '';
+    private array $metadataHaving = array();
 
-    private string $metadataValue = '';
+    private array $metadataKey = array();
+
+    private array $metadataValuePath = array();
+
+    private array $metadataValue = array();
+    // end metadata stuff
 
     /**
      * Constructor
@@ -134,7 +137,7 @@ abstract class AbstractEntity implements CrudInterface
     public function toggleLock(): bool
     {
         $this->getPermissions();
-        if (!$this->Users->userData['can_lock'] && $this->entityData['userid'] !== $this->Users->userData['userid']) {
+        if (!$this->Users->userData['is_admin'] && $this->entityData['userid'] !== $this->Users->userData['userid']) {
             throw new ImproperActionException(_("You don't have the rights to lock/unlock this."));
         }
         $locked = (int) $this->entityData['locked'];
@@ -201,7 +204,8 @@ abstract class AbstractEntity implements CrudInterface
             $sql .= sprintf(" AND %s = '%s'", $filter['column'], $filter['value']);
         }
 
-        $sql .= $this->metadataFilter;
+        // metadata filter (this will just be empty if we're not doing anything metadata related)
+        $sql .= implode(' ', $this->metadataFilter);
 
         // experiments related to something?
         if ($displayParams->searchType === 'related') {
@@ -233,11 +237,17 @@ abstract class AbstractEntity implements CrudInterface
         }
         $sql .= ')';
 
+        // build the having clause for metadata
+        $metadataHaving = '';
+        if (!empty($this->metadataHaving)) {
+            $metadataHaving = 'HAVING ' . implode(' AND ', $this->metadataHaving);
+        }
+
         $sqlArr = array(
             $this->extendedFilter,
             $this->idFilter,
             'GROUP BY id',
-            $this->metadataHaving,
+            $metadataHaving,
             'ORDER BY',
             $displayParams->getOrderSql(),
             $displayParams->sort,
@@ -254,16 +264,17 @@ abstract class AbstractEntity implements CrudInterface
         $req->bindParam(':userid', $this->Users->userData['userid'], PDO::PARAM_INT);
         $req->bindValue(':state', self::STATE_NORMAL, PDO::PARAM_INT);
         if ($this->isMetadataSearch) {
-            $req->bindParam(':metadata_key', $this->metadataKey);
-            $req->bindParam(':metadata_value_path', $this->metadataValuePath);
-            $req->bindParam(':metadata_value', $this->metadataValue);
+            foreach ($this->metadataKey as $i => $v) {
+                $req->bindParam(':metadata_key_' . $i, $this->metadataKey[$i]);
+                $req->bindParam(':metadata_value_path_' . $i, $this->metadataValuePath[$i]);
+                $req->bindParam(':metadata_value_' . $i, $this->metadataValue[$i]);
+            }
         }
 
         $this->bindExtendedValues($req);
-
         $this->Db->execute($req);
 
-        return $this->Db->fetchAll($req);
+        return $req->fetchAll();
     }
 
     public function read(ContentParamsInterface $params): array
@@ -272,37 +283,12 @@ abstract class AbstractEntity implements CrudInterface
             return $this->getBoundEvents();
         }
         if ($params->getTarget() === 'metadata') {
-            return array('metadata' => $this->readAll()['metadata']);
+            return array('metadata' => $this->readCurrent()['metadata']);
         }
-        return $this->readAll();
-    }
-
-    /**
-     * Read all from one entity
-     * Here be dragons!
-     *
-     * @param bool $getTags if true, might take a long time
-     */
-    public function readAll(bool $getTags = true): array
-    {
-        if ($this->id === null) {
-            throw new IllegalActionException('No id was set!');
+        if ($params->getTarget() === 'body') {
+            return array('body' => Tools::md2html($this->readCurrent()['body']));
         }
-        $sql = $this->getReadSqlBeforeWhere($getTags, true);
-
-        $sql .= ' WHERE entity.id = ' . (string) $this->id;
-
-        $req = $this->Db->prepare($sql);
-        $this->Db->execute($req);
-
-        $item = $req->fetch();
-
-        $permissions = $this->getPermissions($item);
-        if ($permissions['read'] === false) {
-            throw new IllegalActionException(Tools::error(true));
-        }
-
-        return $item;
+        return $this->readCurrent();
     }
 
     public function getTeamFromElabid(string $elabid): int
@@ -324,20 +310,16 @@ abstract class AbstractEntity implements CrudInterface
      */
     public function getTags(array $items): array
     {
-        $itemIds = '(';
-        foreach ($items as $item) {
-            $itemIds .= 'tags2entity.item_id = ' . $item['id'] . ' OR ';
-        }
-        $sqlid = rtrim($itemIds, ' OR ') . ')';
-        $sql = 'SELECT DISTINCT tags2entity.tag_id, tags2entity.item_id, tags.tag FROM tags2entity
+        $sqlid = 'tags2entity.item_id IN (' . implode(',', array_column($items, 'id')) . ')';
+        $sql = 'SELECT DISTINCT tags2entity.tag_id, tags2entity.item_id, tags.tag
+            FROM tags2entity
             LEFT JOIN tags ON (tags2entity.tag_id = tags.id)
             WHERE tags2entity.item_type = :type AND ' . $sqlid;
         $req = $this->Db->prepare($sql);
         $req->bindParam(':type', $this->type);
         $this->Db->execute($req);
-        $res = $this->Db->fetchAll($req);
         $allTags = array();
-        foreach ($res as $tags) {
+        foreach ($req->fetchAll() as $tags) {
             $allTags[$tags['item_id']][] = $tags;
         }
         return $allTags;
@@ -367,11 +349,10 @@ abstract class AbstractEntity implements CrudInterface
                 $content = $params->getRating();
                 break;
             case 'metadata':
-                if (!empty($params->getField())) {
-                    return $this->updateJsonField($params);
-                }
                 $content = $params->getMetadata();
                 break;
+            case 'metadatafield':
+                return $this->updateJsonField($params);
             case 'userid':
                 $content = $params->getUserId();
                 break;
@@ -561,12 +542,14 @@ abstract class AbstractEntity implements CrudInterface
     public function addMetadataFilter(string $key, string $value): void
     {
         $this->isMetadataSearch = true;
+        $i = count($this->metadataKey);
         // Note: the key is double quoted so spaces are not an issue
-        $this->metadataKey = '$.extra_fields."' . Filter::sanitize($key) . '"';
-        $this->metadataValuePath = $this->metadataKey . '.value';
-        $this->metadataValue = Filter::sanitize($value);
-        $this->metadataFilter = " AND JSON_CONTAINS_PATH(entity.metadata, 'one', :metadata_key) ";
-        $this->metadataHaving = ' HAVING JSON_UNQUOTE(JSON_EXTRACT(entity.metadata, :metadata_value_path)) LIKE :metadata_value';
+        $key = '$.extra_fields."' . Filter::sanitize($key) . '"';
+        $this->metadataKey[] = $key;
+        $this->metadataValuePath[] = $key . '.value';
+        $this->metadataValue[] = Filter::sanitize($value);
+        $this->metadataFilter[] = " AND JSON_CONTAINS_PATH(entity.metadata, 'one', :metadata_key_" . $i . ') ';
+        $this->metadataHaving[] = ' JSON_UNQUOTE(JSON_EXTRACT(entity.metadata, :metadata_value_path_' . $i . ')) LIKE :metadata_value_' . $i;
     }
 
     /**
@@ -588,7 +571,7 @@ abstract class AbstractEntity implements CrudInterface
         $req->bindParam(':to', $to);
         $this->Db->execute($req);
 
-        return array_column($this->Db->fetchAll($req), 'id');
+        return array_column($req->fetchAll(), 'id');
     }
 
     /**
@@ -648,20 +631,28 @@ abstract class AbstractEntity implements CrudInterface
         $req->bindParam(':team', $this->Users->team, PDO::PARAM_INT);
         $req->bindParam(':category', $category);
         $req->execute();
-        $res = $this->Db->fetchAll($req);
-        return array_column($res, 'id');
+
+        return array_column($req->fetchAll(), 'id');
     }
 
-    public function addToExtendedFilter(string $extendedFilter, array $bindExtendedValues = array()): void
+    public function getIdFromUser(int $userid): array
+    {
+        $sql = 'SELECT id FROM ' . $this->getTable() . ' WHERE userid = :userid';
+        $req = $this->Db->prepare($sql);
+        $req->bindParam(':userid', $userid);
+        $req->execute();
+
+        return array_column($req->fetchAll(), 'id');
+    }
+
+    public function addToExtendedFilter(string $extendedFilter, array $extendedValues = array()): void
     {
         $this->extendedFilter .= $extendedFilter . ' ';
-        $this->bindExtendedValues = array_merge($this->bindExtendedValues, $bindExtendedValues);
+        $this->extendedValues = array_merge($this->extendedValues, $extendedValues);
     }
 
     public function destroy(): bool
     {
-        $this->canOrExplode('write');
-
         // set state to deleted
         return $this->update(new EntityParams((string) self::STATE_DELETED, 'state'));
     }
@@ -671,14 +662,42 @@ abstract class AbstractEntity implements CrudInterface
      */
     protected function updateJsonField(EntityParamsInterface $params): bool
     {
-        // build field (input is double quoted to allow for whitespace in key)
-        $field = '$.extra_fields."' . $params->getField() . '".value';
+        // build field
+        $field = '$.extra_fields.' . $params->getField() . '.value';
         $sql = 'UPDATE ' . $this->getTable() . ' SET metadata = JSON_SET(metadata, :field, :value) WHERE id = :id';
         $req = $this->Db->prepare($sql);
         $req->bindParam(':field', $field);
         $req->bindValue(':value', $params->getContent());
         $req->bindParam(':id', $this->id, PDO::PARAM_INT);
         return $this->Db->execute($req);
+    }
+
+    /**
+     * Read all from one entity
+     * Here be dragons!
+     *
+     * @param bool $getTags if true, might take a long time
+     */
+    private function readCurrent(bool $getTags = true): array
+    {
+        if ($this->id === null) {
+            throw new IllegalActionException('No id was set!');
+        }
+        $sql = $this->getReadSqlBeforeWhere($getTags, true);
+
+        $sql .= ' WHERE entity.id = ' . (string) $this->id;
+
+        $req = $this->Db->prepare($sql);
+        $this->Db->execute($req);
+
+        $item = $req->fetch();
+
+        $permissions = $this->getPermissions($item);
+        if ($permissions['read'] === false) {
+            throw new IllegalActionException(Tools::error(true));
+        }
+
+        return $item;
     }
 
     /**
@@ -730,10 +749,19 @@ abstract class AbstractEntity implements CrudInterface
             $tagsSelect = ", GROUP_CONCAT(DISTINCT tags.tag ORDER BY tags.id SEPARATOR '|') as tags, GROUP_CONCAT(DISTINCT tags.id) as tags_id";
             $tagsJoin = 'LEFT JOIN tags2entity ON (entity.id = tags2entity.item_id AND tags2entity.item_type = \'%1$s\') LEFT JOIN tags ON (tags2entity.tag_id = tags.id)';
         }
+
+        // only include columns if actually searching for comments/filenames
+        $searchAttachments = '';
+        if (!empty(array_column($this->extendedValues, 'searchAttachments'))) {
+            $searchAttachments = ',
+                GROUP_CONCAT(uploads.comment) AS comments,
+                GROUP_CONCAT(uploads.real_name) AS real_names';
+        }
+
         $uploadsJoin = 'LEFT JOIN (
             SELECT uploads.item_id AS up_item_id,
                 (uploads.item_id IS NOT NULL) AS has_attachment,
-                uploads.type
+                uploads.type' . $searchAttachments . '
             FROM uploads
             GROUP BY uploads.item_id, uploads.type)
             AS uploads
@@ -805,7 +833,7 @@ abstract class AbstractEntity implements CrudInterface
 
     private function bindExtendedValues(PDOStatement $req): void
     {
-        foreach ($this->bindExtendedValues as $bindValue) {
+        foreach ($this->extendedValues as $bindValue) {
             $req->bindValue($bindValue['param'], $bindValue['value'], $bindValue['type']);
         }
     }

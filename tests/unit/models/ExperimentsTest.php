@@ -91,11 +91,32 @@ class ExperimentsTest extends \PHPUnit\Framework\TestCase
     {
         $this->Experiments->setId(1);
         $this->Experiments->canOrExplode('read');
+        // add some steps and links in there, too
+        $this->Experiments->Steps->create(new ContentParams('some step'));
+        $this->Experiments->Links->create(new ContentParams('3'));
         $this->assertIsInt($this->Experiments->duplicate());
     }
 
     public function testInsertTags(): void
     {
         $this->Experiments->create(new EntityParams('0', '', array('tags' => array('tag-bbbtbtbt', 'tag-auristearuiset'))));
+    }
+
+    public function testGetTags(): void
+    {
+        $res = $this->Experiments->getTags(array(array('id' => 0)));
+        $this->assertEmpty($res);
+        $res = $this->Experiments->getTags(array(array('id' => 1), array('id' => 2)));
+        $this->assertIsArray($res);
+    }
+
+    public function testAddMetadataFilter(): void
+    {
+        $this->Experiments->addMetadataFilter('key', 'value');
+    }
+
+    public function testGetTimestampThisMonth(): void
+    {
+        $this->assertEquals(0, $this->Experiments->getTimestampLastMonth());
     }
 }
